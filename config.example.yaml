@@ -1,0 +1,120 @@
+# Calisto Panel — configuración de ejemplo
+#
+# Copiar a C:\ProgramData\CalistoPanel\config.yaml y completar los valores marcados
+# con REEMPLAZAR. Los secretos NO van aquí: ver secrets.yaml al final del archivo.
+#
+# Referencia de cada campo: docs/ARCHITECTURE.md §7
+
+server:
+  # 0.0.0.0 a propósito: con bind a una IP concreta el servicio no arranca si la
+  # interfaz aún no tiene dirección al iniciar sesión. El confinamiento lo hace la
+  # regla de firewall (perfil Privado + subred). Ver D-10 y D-11.
+  listen: "0.0.0.0:7171"
+  stale_ms: 10000
+  dead_ms: 60000
+  sse_keepalive_ms: 15000
+
+secrets_file: "C:\\ProgramData\\CalistoPanel\\secrets.yaml"
+
+log:
+  file: "C:\\ProgramData\\CalistoPanel\\logs\\panel.log"
+  level: "info"          # debug | info | warn | error
+  max_size_mb: 5
+  max_backups: 5
+
+# ---------------------------------------------------------------------------
+# Sensores (LibreHardwareMonitor)
+# ---------------------------------------------------------------------------
+# Obtener los sensor_id con:
+#   Invoke-RestMethod http://127.0.0.1:8085/data.json | ConvertTo-Json -Depth 20
+# Los de abajo son EJEMPLOS de la forma que tienen; los de tu máquina son distintos.
+# Un sensor_id inexistente degrada solo su tile a "unavailable". Ver D-20.
+sensors:
+  url: "http://127.0.0.1:8085/data.json"
+  interval_ms: 5000
+  timeout_ms: 2000
+  items:
+    - id: "cpu.load"
+      label: "CPU"
+      sensor_id: "/amdcpu/0/load/0"            # REEMPLAZAR
+    - id: "cpu.temp"
+      label: "CPU temp"
+      sensor_id: "/amdcpu/0/temperature/0"     # REEMPLAZAR
+    - id: "gpu.temp"
+      label: "GPU temp"
+      sensor_id: "/gpu-nvidia/0/temperature/0" # REEMPLAZAR
+    - id: "ram.used"
+      label: "RAM"
+      sensor_id: "/ram/data/0"                 # REEMPLAZAR
+    - id: "disk.load"
+      label: "Disco"
+      sensor_id: "/nvme/0/load/0"              # REEMPLAZAR
+    - id: "net.down"
+      label: "Red"
+      sensor_id: "/nic/.../throughput/7"       # REEMPLAZAR
+
+# ---------------------------------------------------------------------------
+# Integración continua
+# ---------------------------------------------------------------------------
+# interval_ms admitidos: 60000 o 150000. Una sola petición por ciclo para todos los
+# pipelines vía maxBuildsPerDefinition=1. Ver D-06 y ARCHITECTURE §6.
+ci:
+  provider: "azure_devops"
+  interval_ms: 60000
+  timeout_ms: 10000
+  error_backoff_max_ms: 300000
+  azure_devops:
+    organization: "REEMPLAZAR"
+    project: "REEMPLAZAR"
+    api_version: "7.1"
+    # Máximo 5. Obtener los id con el endpoint /_apis/build/definitions (README §4.6).
+    pipelines:
+      - id: 42
+        label: "REEMPLAZAR · main"
+      - id: 57
+        label: "REEMPLAZAR · api"
+
+# ---------------------------------------------------------------------------
+# Acciones
+# ---------------------------------------------------------------------------
+# Lista cerrada. El cliente solo envía un actionId; ningún valor del cliente entra
+# en el argv. Ver D-16 y ARCHITECTURE §4.
+actions:
+  timeout_ms: 60000
+  rate_limit_ms: 2000
+  confirm_required:
+    - "docker.stop"
+    - "vm.suspend"
+
+  docker:
+    enabled: true
+    # Cadena que imprime `docker desktop status` cuando está en ejecución.
+    # Verificar en la máquina y copiar literal. Comparación sin distinguir
+    # mayúsculas. Si está mal, el tile muestra el estado invertido. Ver D-27.
+    status_running_match: "running"
+
+  vmware:
+    enabled: true
+    # Verificar con:
+    #   Get-ChildItem "C:\Program Files*\VMware\VMware Workstation\vmrun.exe"
+    vmrun_path: "C:\\Program Files (x86)\\VMware\\VMware Workstation\\vmrun.exe"
+    # Solo el .vmx. El .vmxf no es argumento válido para vmrun.
+    # suspend soft requiere VMware Tools en el huésped.
+    vmx: "C:\\Users\\USUARIO\\Documents\\Virtual Machines\\MI_VM\\MI_VM.vmx"
+
+  media:
+    enabled: true
+    # Teclas virtuales de Windows enviadas con SendInput. Requiere que panel.exe
+    # corra en la sesión interactiva del usuario, no como servicio. Ver D-09.
+    playpause_vk: 0xB3   # VK_MEDIA_PLAY_PAUSE
+    next_vk: 0xB0        # VK_MEDIA_NEXT_TRACK
+
+# ---------------------------------------------------------------------------
+# secrets.yaml — archivo aparte, NUNCA al repositorio
+# ---------------------------------------------------------------------------
+# api_token: "<cadena aleatoria larga>"
+# azure_devops_pat: "<PAT con scope Build (Read) únicamente>"
+#
+# Restringir permisos:
+#   icacls "C:\ProgramData\CalistoPanel\secrets.yaml" /inheritance:r ^
+#     /grant:r "%USERNAME%:(R,W)" /grant:r "Administrators:(F)"
