@@ -163,8 +163,8 @@ no los dupliques como constantes en el código.
 ## Pruebas
 
 Obligatorias:
-1. Parser de LHM contra `testdata/lhm/data.json` (fixture real), incluyendo la regla de
-   separador decimal: `"41,0 °C"` → `41.0`, `"4.593,0 MHz"` → `4593.0`, `"1,000 V"` →
+1. Parser de LHM contra `testdata/lhm/data.json` (fixture real, usa punto decimal),
+   incluyendo la regla de separador decimal (los casos con coma son cadenas sintéticas): `"41,0 °C"` → `41.0`, `"4.593,0 MHz"` → `4593.0`, `"1,000 V"` →
    `1.0`, y valores ausentes o `"-"`.
 2. Resolución de acciones: ID desconocido rechazado, argv construido exactamente como lo
    define la configuración.

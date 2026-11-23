@@ -17,12 +17,12 @@ máquina y no pueden deducirse. Completa los seis antes de ejecutar nada.
 
 | # | Valor | Dónde va | Cómo obtenerlo |
 |---|---|---|---|
-| 1 | Usuario de GitHub | `go.mod` (`module github.com/<GITHUB_USER>/calisto-panel`) | — |
-| 2 | Organización, proyecto e IDs de definición de Azure DevOps | `config.yaml` → `ci.azure_devops` | §4.6 |
-| 3 | `SensorId` de LibreHardwareMonitor | `config.yaml` → `sensors.items[].sensor_id` | §4.4 |
-| 4 | Subred de tu LAN | regla de firewall | §4.8 |
-| 5 | Ruta real de `vmrun.exe` | `config.yaml` → `actions.vmrun_path` | §4.3 |
-| 6 | Cadena que imprime `docker desktop status` | `config.yaml` → `actions.docker.status_running_match` | §4.2 |
+| 1 | Usuario de GitHub | `go.mod` (`module github.com/<GITHUB_USER>/calisto-panel`) | ✅ `MiguelSamayoa` |
+| 2 | Organización, proyecto e IDs de definición de Azure DevOps | `config.yaml` → `ci.azure_devops` | §4.6. ✅ organización `MikeSama`; faltan proyecto y pipelines. **Opcional**: sin pipelines el CI queda desactivado |
+| 3 | `SensorId` de LibreHardwareMonitor | `config.yaml` → `sensors.items[].sensor_id` | §4.4. ✅ los 5 sensores |
+| 4 | Subred de tu LAN | regla de firewall | §4.8. ✅ `192.168.1.0/24` (ver §4.1.1) |
+| 5 | Ruta real de `vmrun.exe` | `config.yaml` → `actions.vmrun_path` | §4.3. ✅ verificada |
+| 6 | Cadena que imprime `docker desktop status` | `config.yaml` → `actions.docker.status_running_match` | §4.2. ✅ `running` |
 
 ---
 
@@ -110,6 +110,42 @@ Get-NetConnectionProfile
 Set-NetConnectionProfile -InterfaceAlias "Ethernet" -NetworkCategory Private
 ```
 
+#### 4.1.1 VPN (FortiClient, WireGuard) y pérdida de acceso al panel
+
+El teléfono llega al PC por la IP de la Ethernet local; la VPN no cambia esa IP. Lo que
+sí puede pasar, de más a menos probable:
+
+1. **Colisión de subred.** `192.168.1.0/24` es la subred doméstica más común y muchas
+   redes corporativas la usan o la anuncian por VPN. Si la VPN instala una ruta que se
+   solapa con ella, las respuestas al teléfono salen por el túnel y el panel deja de
+   responder. **Solución robusta:** cambia la LAN del router a una subred poco común
+   (p. ej. `192.168.77.0/24` o `10.77.0.0/24`), reinicia el PC y el teléfono, rehaz la
+   reserva DHCP (§4.1) y actualiza la subred de la regla de firewall (§4.8). VMware ya
+   usa `192.168.45.0/24` y `192.168.53.0/24`; evítalas.
+2. **La VPN bloquea la LAN local.**
+   - *WireGuard* con `AllowedIPs = 0.0.0.0/0` activa un cortafuegos que bloquea todo lo
+     que no vaya por el túnel, incluida tu LAN. Reemplaza `0.0.0.0/0` por la lista
+     equivalente que **excluye** tu subred (cualquier calculadora de "AllowedIPs
+     excluyendo una red" la genera).
+   - *FortiClient*: depende de la política de la puerta de enlace. Si el administrador
+     fuerza túnel completo sin acceso a la LAN local, no se arregla desde tu PC.
+3. **Cambio de IP.** Lo cubre la reserva DHCP de §4.1.
+
+La regla de firewall (perfil Privado + subred) **no** abre el panel por la interfaz de la
+VPN: la Ethernet sigue siendo Privada aunque el adaptador de la VPN sea Público. El panel
+solo deja de responder si la VPN corta o redirige la LAN local (puntos 1 y 2).
+
+Comprobación con la VPN conectada:
+
+```powershell
+route print 192.168.1.*                       # ¿hay más de una ruta para tu subred?
+Test-NetConnection <IP_DEL_ROUTER>                # ¿alcanzas el router?
+Invoke-RestMethod http://<IP_DEL_PC>:7171/healthz
+```
+
+Y luego abre `http://<IP-del-PC>:7171/` desde el teléfono. Si falla solo con la VPN,
+aplica el punto 1 o el 2.
+
 ### 4.2 Docker Desktop
 
 Verifica el comando y **copia su salida literal**:
@@ -118,7 +154,9 @@ Verifica el comando y **copia su salida literal**:
 docker desktop status
 ```
 
-La cadena que indica "en ejecución" varía entre versiones. Pon en `config.yaml`:
+La salida es una tabla (`Status  running`). El panel compara el **valor de la fila
+`Status`** con `status_running_match`, no busca la cadena en todo el texto. Pon en
+`config.yaml`:
 
 ```yaml
 actions:
@@ -168,16 +206,15 @@ Invoke-RestMethod http://127.0.0.1:8085/data.json |
 ```
 
 Abre ese archivo y busca los nodos hoja: cada uno tiene `SensorId`, `Text`, `Type` y
-`Value`. Copia los seis que necesitas a `config.yaml`. Ejemplos de la forma que tienen
+`Value`. Copia los cinco que necesitas a `config.yaml`. Ejemplos de la forma que tienen
 (**los tuyos serán distintos**):
 
 ```
-/amdcpu/0/load/0              Type: Load          → uso de CPU
-/amdcpu/0/temperature/0       Type: Temperature   → temperatura de CPU
-/gpu-nvidia/0/load/0          Type: Load          → uso de GPU
-/gpu-nvidia/0/temperature/0   Type: Temperature   → temperatura de GPU
-/ram/data/0                   Type: Data          → memoria usada
-/nvme/0/load/0                Type: Load          → uso de disco
+/intelcpu/0/load/0                      Type: Load          → uso de CPU
+/intelcpu/0/temperature/6               Type: Temperature   → temperatura de CPU
+/gpu-nvidia/0/temperature/0             Type: Temperature   → temperatura de GPU
+/ram/data/0                             Type: Data          → memoria usada
+/nic/%7B<GUID>%7D/throughput/8          Type: Throughput    → velocidad de bajada
 ```
 
 Ese mismo archivo queda como fixture de pruebas. Guárdalo en el repositorio: es la
@@ -200,6 +237,12 @@ New-Item -ItemType Directory -Force "C:\Tools\calisto-panel", "C:\ProgramData\Ca
 ```
 
 ### 4.6 PAT de Azure DevOps
+
+**Opcional.** `portal.azure.com` es Azure (la nube), no Azure DevOps. Los pipelines viven
+en `dev.azure.com`, que es gratuito: entra con tu cuenta Microsoft personal y crea una
+organización (su nombre es la `<organización>` de las URLs de abajo) y un proyecto.
+Mientras `ci.azure_devops.pipelines` esté vacío, el CI queda desactivado: no se sondea,
+el evento `ci` sale con `items: []`, y `secrets.yaml` no necesita `azure_devops_pat`.
 
 1. `https://dev.azure.com/<organización>/_usersSettings/tokens` → nuevo token.
 2. Scope: **Build (Read)** únicamente. Nada más.
@@ -227,13 +270,16 @@ azure_devops_pat: "<PAT>"
 Genera el token:
 
 ```powershell
-[Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Max 256 }))
+$b = New-Object byte[] 32
+[Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b)
+[Convert]::ToBase64String($b)
 ```
 
-Restringe el acceso:
+Restringe el acceso (el SID `S-1-5-32-544` es el grupo de administradores en cualquier
+idioma de Windows; en español el nombre es `Administradores`, no `Administrators`):
 
 ```cmd
-icacls "C:\ProgramData\CalistoPanel\secrets.yaml" /inheritance:r /grant:r "%USERNAME%:(R,W)" /grant:r "Administrators:(F)"
+icacls "C:\ProgramData\CalistoPanel\secrets.yaml" /inheritance:r /grant:r "%USERNAME%:(R,W)" /grant:r "*S-1-5-32-544:(F)"
 ```
 
 ### 4.8 Firewall
@@ -246,9 +292,9 @@ New-NetFirewallRule -DisplayName "Calisto Panel 7171" `
 
 **Nunca habilites el perfil `Public` en esta regla.** Cuando conectes una VPN de
 trabajo, Windows registra una interfaz nueva que puede clasificarse como pública; una
-regla con `Public` expondría el panel en la red del cliente. El precio de no hacerlo es
-que el panel deja de responder mientras la VPN está conectada; ese es el
-comportamiento correcto.
+regla con `Public` expondría el panel en la red del cliente. Sin `Public` la regla no
+abre la interfaz de la VPN; tu Ethernet sigue siendo Privada y el panel responde en la
+LAN. Si deja de responder con la VPN conectada, el causante es la VPN (ver §4.1.1).
 
 No abras puertos en el router. Si algún día necesitas acceso remoto, se resuelve con
 Tailscale o WireGuard, no con port forwarding.
@@ -363,15 +409,17 @@ sin sesiones abiertas de nada.
 | `ok` | dato fresco | — |
 | `stale` | el dato tiene más de 10 s; se muestra en gris con su antigüedad | 10 s |
 | `dead` | el dato tiene más de 60 s; tile tachado | 60 s |
-| `unavailable` | la fuente no responde o el `sensor_id` no existe | — |
+| `unavailable` | nunca llegó un dato, o el `sensor_id` no existe | — |
 | `auth` | el PAT fue rechazado (401/403) — caducó o perdió el scope | — |
 | `error` | fallo de red u otro error de la fuente | — |
 
 Un tile en `auth` significa "renueva el PAT", no "no hay builds". La distinción es
 intencional: un dashboard que miente en silencio es peor que uno apagado.
 
-Cuando LHM cae, **solo** los tiles de hardware pasan a `unavailable`. El CI sigue
-funcionando, y al revés.
+Cuando LHM cae, **solo** los tiles de hardware se degradan: primero `stale` (10 s) y luego
+`dead` (60 s). Si LHM nunca respondió desde que arrancó el panel, están `unavailable`. El
+CI sigue funcionando, y al revés. Los umbrales de 10 y 60 s son los de los sensores; el CI
+usa el doble y el cuádruple de su intervalo (§ARCHITECTURE 2).
 
 ### 6.2 Comandos de diagnóstico
 
@@ -406,7 +454,7 @@ Get-NetFirewallRule -DisplayName "Calisto Panel 7171" | Get-NetFirewallPortFilte
 | Todo cargaba y de golpe dejó de cargar | cambió la IP del PC (sin reserva DHCP) | `ipconfig` y comparar con la Start URL |
 | Tiles de hardware en `unavailable`, CI bien | LHM cerrado, sin elevación, o servidor web apagado | abrir `http://127.0.0.1:8085/data.json` |
 | Temperaturas y GPU ausentes, el resto bien | LHM corriendo **sin** privilegios de administrador | relanzar elevado |
-| Valores numéricos absurdos (`41` en lugar de `41,0`, o `1` en lugar de `1000`) | regla de separador decimal mal aplicada al locale | §7 y el test del parser |
+| Valores numéricos absurdos (`41` en lugar de `41.0`, o `1` en lugar de `1000`) | regla de separador decimal mal aplicada al locale | §7 y el test del parser |
 | Tile de CI en `auth` | PAT caducado o sin scope Build (Read) | regenerar el PAT |
 | Tile de CI en `error` tras funcionar días | throttling de Azure DevOps | subir `ci.interval` a 150 s |
 | Botones deshabilitados | el token no está en `localStorage` de este navegador | §5.4 |
@@ -440,25 +488,28 @@ Estas dos cosas no tienen solución en software y las estás aceptando a concien
 
 ## 7. Nota sobre el parseo de valores
 
-LibreHardwareMonitor devuelve los valores como **cadenas con unidad y con el separador
-decimal del locale del sistema**. En tu equipo (es-GT) verás `"41,0 °C"` y `"1,000 V"`,
-donde la coma es decimal. En otro locale el mismo sensor llega como `"41.0 °C"`.
+LibreHardwareMonitor devuelve los valores como **cadenas con unidad**. `Value` usa el
+separador decimal del locale del sistema; `RawValue` es otra cadena con unidad que
+`data.json` incluye en las versiones recientes, en la unidad base y con más precisión
+(en la red, `Value` dice `"1.3 KB/s"` y `RawValue` dice `"1290.1 B/s"`). En tu equipo, el
+fixture real (`testdata/lhm/data.json`) usa **punto** decimal (`"55.0 °C"`,
+`"0.670 V"`). Con otro locale `Value` podría llegar como `"41,0 °C"`.
 
 La regla implementada es: **el último separador presente en la cadena es el decimal**;
 cualquier otro es separador de miles y se descarta. `"4.593,0 MHz"` → `4593.0`.
-`"1,000 V"` → `1.0`.
+`"1,000 V"` → `1.0`. El parser lee `RawValue` si existe y cae a `Value` si no.
 
-Es el punto más frágil del proyecto y la causa de la fila "valores absurdos" en §6.3. El
-fixture de `testdata/lhm/data.json` debe ser la salida real de tu máquina, no un ejemplo
-de otra, o los tests validarán algo que no te ocurre. Las versiones recientes de LHM
-añadieron un campo de unidad fija en `data.json`; el parser lo usa si está presente y
-cae a la regla anterior si no.
+Es el punto más frágil del proyecto y la causa de la fila "valores absurdos" en §6.3. Los
+casos con coma decimal **no** salen del fixture (tu máquina usa punto): se prueban con
+cadenas sintéticas en el test unitario del parser. El fixture valida el recorrido del
+árbol y los valores reales de tu equipo.
 
 ---
 
 ## 8. Alcance de la v1
 
-**Incluido:** 6 tiles (CI, CPU, RAM, GPU/temperatura, disco, red), 6 acciones
+**Incluido:** un tile por cada sensor de `config.yaml` (hoy 5: CPU, temperatura de CPU,
+temperatura de GPU, RAM y red) más la lista de pipelines de CI, 6 acciones
 (`docker.start`, `docker.stop`, `vm.suspend`, `vm.start`, `media.playpause`,
 `media.next`), SSE, token, arranque automático, firewall, Fully Kiosk configurado.
 

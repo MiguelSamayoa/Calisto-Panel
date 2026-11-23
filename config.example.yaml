@@ -36,22 +36,20 @@ sensors:
   items:
     - id: "cpu.load"
       label: "CPU"
-      sensor_id: "/amdcpu/0/load/0"            # REEMPLAZAR
+      sensor_id: "/intelcpu/0/load/0"          # REEMPLAZAR
     - id: "cpu.temp"
       label: "CPU temp"
-      sensor_id: "/amdcpu/0/temperature/0"     # REEMPLAZAR
+      sensor_id: "/intelcpu/0/temperature/6"   # REEMPLAZAR
     - id: "gpu.temp"
       label: "GPU temp"
       sensor_id: "/gpu-nvidia/0/temperature/0" # REEMPLAZAR
     - id: "ram.used"
       label: "RAM"
       sensor_id: "/ram/data/0"                 # REEMPLAZAR
-    - id: "disk.load"
-      label: "Disco"
-      sensor_id: "/nvme/0/load/0"              # REEMPLAZAR
     - id: "net.down"
       label: "Red"
-      sensor_id: "/nic/.../throughput/7"       # REEMPLAZAR
+      # El GUID del adaptador es de cada máquina; "Download Speed" es throughput/8.
+      sensor_id: "/nic/%7BGUID%7D/throughput/8" # REEMPLAZAR
 
 # ---------------------------------------------------------------------------
 # Integración continua
@@ -68,11 +66,12 @@ ci:
     project: "REEMPLAZAR"
     api_version: "7.1"
     # Máximo 5. Obtener los id con el endpoint /_apis/build/definitions (README §4.6).
-    pipelines:
-      - id: 42
-        label: "REEMPLAZAR · main"
-      - id: 57
-        label: "REEMPLAZAR · api"
+    # Lista vacía = CI desactivado (no se sondea y azure_devops_pat no es obligatorio).
+    pipelines: []
+    #  - id: 42
+    #    label: "REEMPLAZAR · main"
+    #  - id: 57
+    #    label: "REEMPLAZAR · api"
 
 # ---------------------------------------------------------------------------
 # Acciones
