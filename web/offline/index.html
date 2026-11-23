@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<meta name="theme-color" content="#000000">
+<title>Calisto Panel (sin conexión)</title>
+<style>
+  html, body { height: 100%; margin: 0; background: #000; color: #777; font: 16px system-ui, sans-serif; }
+  body { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center; padding: 24px; }
+  h1 { font-size: 1.2rem; font-weight: 600; margin: 0; color: #999; }
+  p { margin: 0; }
+  #clock { font-size: 2.4rem; color: #555; margin-top: 16px; }
+</style>
+</head>
+<body>
+<h1>Sin conexión con el PC</h1>
+<p>El PC está apagado o fuera de la red. Se reintentará solo.</p>
+<div id="clock"></div>
+<script>
+(function () {
+  'use strict';
+  function tick() {
+    var d = new Date();
+    document.getElementById('clock').textContent =
+      ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+  }
+  tick();
+  setInterval(tick, 10000);
+})();
+</script>
+</body>
+</html>

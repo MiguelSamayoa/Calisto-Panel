@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<meta name="theme-color" content="#000000">
+<title>Calisto Panel</title>
+<style>
+  :root {
+    --bg: #000;
+    --card: #0e0e0e;
+    --line: #1f1f1f;
+    --text: #d0d0d0;
+    --dim: #777;
+    --ok: #4cae62;
+    --warn: #d1a03a;
+    --bad: #d9534f;
+    --run: #4a90d9;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body {
+    font: 16px/1.3 system-ui, sans-serif;
+    padding: 12px;
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  header h1 { font-size: 1rem; font-weight: 600; margin: 0; flex: 1; letter-spacing: .04em; }
+  #dot { width: 10px; height: 10px; border-radius: 50%; background: var(--bad); }
+  #dot.on { background: var(--ok); }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  #gear { background: none; border: 1px solid var(--line); border-radius: 8px; width: 40px; height: 40px; font-size: 1.2rem; }
+
+  #banner { display: none; margin-bottom: 12px; padding: 10px 12px; border: 1px solid var(--warn); color: var(--warn); border-radius: 8px; }
+  #banner.show { display: block; }
+
+  #cfg { display: none; margin-bottom: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; gap: 8px; }
+  #cfg.show { display: flex; flex-wrap: wrap; }
+  #cfg input { flex: 1 1 200px; min-width: 0; background: #111; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 10px; font: inherit; -webkit-user-select: text; user-select: text; }
+  #cfg button { border: 1px solid var(--line); background: #151515; border-radius: 6px; padding: 10px 14px; }
+
+  h2 { font-size: .75rem; font-weight: 600; color: var(--dim); text-transform: uppercase; letter-spacing: .08em; margin: 18px 0 8px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  .offline .grid#tiles { opacity: .35; }
+
+  .tile { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+  .tile .label { color: var(--dim); font-size: .8rem; }
+  .tile .value { font-size: 2rem; font-weight: 600; margin: 4px 0 2px; white-space: nowrap; }
+  .tile .sub { font-size: .75rem; color: var(--dim); min-height: 1em; }
+  .tile.stale .value { color: var(--dim); }
+  .tile.dead .value { color: var(--dim); text-decoration: line-through; }
+  .tile.unavailable .value, .tile.auth .value, .tile.error .value { color: var(--dim); }
+  .tile.auth .sub, .tile.error .sub { color: var(--bad); }
+
+  #ci { display: flex; flex-direction: column; gap: 8px; }
+  .ci { display: flex; align-items: center; gap: 10px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+  .ci .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ci .build { color: var(--dim); font-size: .75rem; }
+  .chip { font-size: .85rem; font-weight: 600; padding: 4px 10px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
+  .chip.succeeded { color: var(--ok); }
+  .chip.partiallySucceeded { color: var(--warn); }
+  .chip.failed { color: var(--bad); }
+  .chip.running { color: var(--run); }
+  .chip.queued, .chip.canceled, .chip.none { color: var(--dim); }
+  .ci.stale .chip, .ci.dead .chip { color: var(--dim); }
+  .ci.dead .name { text-decoration: line-through; }
+  .empty { color: var(--dim); padding: 12px; border: 1px dashed var(--line); border-radius: 10px; }
+
+  #actions { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+  .act { background: #151515; border: 1px solid var(--line); border-radius: 10px; min-height: 64px; padding: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+  .act:disabled { opacity: .35; cursor: default; }
+  .act .name { font-weight: 600; }
+  .act .st { font-size: .75rem; color: var(--dim); min-height: 1em; }
+  .act.armed { border-color: var(--warn); color: var(--warn); }
+  .act.running .st { color: var(--run); }
+  .act.ok .st { color: var(--ok); }
+  .act.failed .st, .act.timeout .st { color: var(--bad); }
+
+  #toast { position: fixed; left: 12px; right: 12px; bottom: 12px; padding: 12px; background: #1a1a1a; border: 1px solid var(--line); border-radius: 8px; display: none; }
+  #toast.show { display: block; }
+</style>
+</head>
+<body>
+<header>
+  <span id="dot"></span>
+  <h1>CALISTO</h1>
+  <button id="gear" type="button" aria-label="Ajustes">&#9881;</button>
+</header>
+
+<div id="banner"></div>
+
+<form id="cfg" autocomplete="off">
+  <input id="token" type="password" placeholder="Token de acciones" aria-label="Token de acciones">
+  <button type="submit">Guardar</button>
+  <button type="button" id="clear">Borrar</button>
+</form>
+
+<h2>Sistema</h2>
+<div id="tiles" class="grid"></div>
+
+<h2>Pipelines</h2>
+<div id="ci"></div>
+
+<h2>Acciones</h2>
+<div id="actions" class="grid"></div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  var TOKEN_KEY = 'calistoToken';
+  var SILENCE_MS = 20000;      // sensors arrive every 5 s; this long without events = offline
+  var CONFIRM_MS = 3000;       // window for the second tap on a destructive action
+
+  var ACTION_NAMES = {
+    'docker.start': 'Docker ▶',
+    'docker.stop': 'Docker ■',
+    'vm.start': 'VM ▶',
+    'vm.suspend': 'VM ⏸',
+    'media.playpause': '⏯',
+    'media.next': '⏭'
+  };
+  var RESULT_TEXT = {
+    succeeded: 'OK ✓',
+    partiallySucceeded: 'Parcial !',
+    failed: 'Falló ✗',
+    canceled: 'Cancelado',
+    running: 'En curso…',
+    queued: 'En cola'
+  };
+  var STATE_TEXT = {
+    stale: 'dato viejo',
+    dead: 'sin datos',
+    unavailable: 'no disponible',
+    auth: 'renueva el PAT',
+    error: 'error de la fuente'
+  };
+  var ACTION_STATE_TEXT = { running: '…', ok: '✓', failed: '✗', timeout: 'tiempo agotado' };
+
+  var $ = function (id) { return document.getElementById(id); };
+  var lastEvent = Date.now();
+  var connected = false;
+  var tiles = {};              // sensor id -> {el, value, sub}
+  var tileIds = '';
+  var buttons = {};            // action id -> {el, st, armed timer}
+  var confirmRequired = [];
+  var actionStates = {};       // action id -> {state, message}
+
+  function getToken() {
+    try { return localStorage.getItem(TOKEN_KEY) || ''; } catch (e) { return ''; }
+  }
+  function setToken(v) {
+    try {
+      if (v) { localStorage.setItem(TOKEN_KEY, v); } else { localStorage.removeItem(TOKEN_KEY); }
+    } catch (e) { toast('No se pudo guardar el token en este navegador'); }
+  }
+
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) { e.className = cls; }
+    if (text !== undefined) { e.textContent = text; }
+    return e;
+  }
+
+  // ---- formatting: the server sends raw values, the client decides presentation ----
+
+  function formatValue(v, unit) {
+    if (unit === '%' || unit === '°C') { return Math.round(v) + (unit === '%' ? ' %' : '°C'); }
+    if (unit === 'B/s') {
+      if (v < 1000) { return Math.round(v) + ' B/s'; }
+      if (v < 1e6) { return (v / 1e3).toFixed(1) + ' KB/s'; }
+      return (v / 1e6).toFixed(1) + ' MB/s';
+    }
+    if (unit === 'GB') { return v.toFixed(1) + ' GB'; }
+    return (Math.round(v * 10) / 10) + (unit ? ' ' + unit : '');
+  }
+
+  function formatAge(ms) {
+    var s = Math.round(ms / 1000);
+    return s < 60 ? s + ' s' : Math.round(s / 60) + ' min';
+  }
+
+  // ---- sensors ----
+
+  function buildTiles(items) {
+    var grid = $('tiles');
+    grid.textContent = '';
+    tiles = {};
+    items.forEach(function (it) {
+      var t = el('div', 'tile');
+      var label = el('div', 'label', it.label);
+      var value = el('div', 'value', '—');
+      var sub = el('div', 'sub');
+      t.appendChild(label); t.appendChild(value); t.appendChild(sub);
+      grid.appendChild(t);
+      tiles[it.id] = { el: t, value: value, sub: sub };
+    });
+  }
+
+  function renderSensors(data) {
+    var ids = data.items.map(function (i) { return i.id; }).join('|');
+    if (ids !== tileIds) { tileIds = ids; buildTiles(data.items); }
+    data.items.forEach(function (it) {
+      var t = tiles[it.id];
+      t.el.className = 'tile ' + it.state;
+      var usable = it.state === 'ok' || it.state === 'stale' || it.state === 'dead';
+      t.value.textContent = usable ? formatValue(it.value, it.unit) : '—';
+      var sub = '';
+      if (it.ageMs !== undefined) { sub = STATE_TEXT[it.state] + ' · ' + formatAge(it.ageMs); }
+      else if (it.state !== 'ok') { sub = STATE_TEXT[it.state] || it.state; }
+      t.sub.textContent = sub;
+    });
+  }
+
+  // ---- CI ----
+
+  function renderCI(data) {
+    var box = $('ci');
+    box.textContent = '';
+    if (!data.items.length) {
+      box.appendChild(el('div', 'empty', 'Sin pipelines configurados'));
+      return;
+    }
+    data.items.forEach(function (it) {
+      var row = el('div', 'ci ' + it.state);
+      var name = el('div', 'name', it.label);
+      if (it.build) { name.appendChild(el('div', 'build', '#' + it.build)); }
+      var chipClass = 'chip none';
+      var chipText;
+      if (it.state === 'ok' || it.state === 'stale' || it.state === 'dead') {
+        chipText = RESULT_TEXT[it.result] || it.result || '—';
+        if (it.result) { chipClass = 'chip ' + it.result; }
+        if (it.ageMs !== undefined) { chipText += ' · ' + STATE_TEXT[it.state]; }
+      } else {
+        chipText = STATE_TEXT[it.state] || it.state;
+      }
+      row.appendChild(name);
+      row.appendChild(el('span', chipClass, chipText));
+      box.appendChild(row);
+    });
+  }
+
+  // ---- actions ----
+
+  function toast(msg) {
+    var t = $('toast');
+    t.textContent = msg;
+    t.className = 'show';
+    clearTimeout(toast.timer);
+    toast.timer = setTimeout(function () { t.className = ''; }, 4000);
+  }
+
+  function updateButtonsEnabled() {
+    var has = getToken() !== '';
+    Object.keys(buttons).forEach(function (id) {
+      buttons[id].el.disabled = !has;
+      buttons[id].el.title = has ? '' : 'Introduce el token en ajustes';
+    });
+  }
+
+  function disarm(id) {
+    var b = buttons[id];
+    if (!b) { return; }
+    clearTimeout(b.timer);
+    b.timer = null;
+    b.el.classList.remove('armed');
+    b.name.textContent = ACTION_NAMES[id] || id;
+  }
+
+  function onAction(id) {
+    var b = buttons[id];
+    if (confirmRequired.indexOf(id) >= 0 && !b.timer) {   // first tap of a destructive action
+      b.el.classList.add('armed');
+      b.name.textContent = '¿Confirmar?';
+      b.timer = setTimeout(function () { disarm(id); }, CONFIRM_MS);
+      return;
+    }
+    disarm(id);
+    send(id);
+  }
+
+  function send(id) {
+    fetch('/api/do/' + encodeURIComponent(id), {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + getToken() }
+    }).then(function (r) {
+      return r.json().then(function (body) { return { status: r.status, body: body }; },
+                           function () { return { status: r.status, body: {} }; });
+    }).then(function (res) {
+      if (res.status === 202) { return; }
+      var msgs = {
+        401: 'Token inválido',
+        404: 'Acción desconocida',
+        409: 'Ya se está ejecutando',
+        429: 'Espera ' + Math.ceil((res.body.retryAfterMs || 2000) / 1000) + ' s'
+      };
+      toast(msgs[res.status] || 'Error ' + res.status);
+    }).catch(function () { toast('Sin conexión con el PC'); });
+  }
+
+  function buildButtons(ids) {
+    var box = $('actions');
+    box.textContent = '';
+    buttons = {};
+    ids.forEach(function (id) {
+      var b = el('button', 'act');
+      b.type = 'button';
+      var name = el('span', 'name', ACTION_NAMES[id] || id);
+      var st = el('span', 'st');
+      b.appendChild(name); b.appendChild(st);
+      b.addEventListener('click', function () { onAction(id); });
+      box.appendChild(b);
+      buttons[id] = { el: b, name: name, st: st, timer: null };
+    });
+    updateButtonsEnabled();
+  }
+
+  function renderActions(data) {
+    data.items.forEach(function (it) { actionStates[it.id] = it; });
+    Object.keys(buttons).forEach(function (id) {
+      var s = actionStates[id];
+      var b = buttons[id];
+      b.el.classList.remove('running', 'ok', 'failed', 'timeout');
+      b.st.textContent = '';
+      // Items disappear from the event 60 s after finishing: forget them then.
+      var present = data.items.some(function (i) { return i.id === id; });
+      if (!s || !present) { delete actionStates[id]; return; }
+      b.el.classList.add(s.state);
+      b.st.textContent = ACTION_STATE_TEXT[s.state] + (s.message && s.state !== 'ok' ? ' ' + s.message : '');
+    });
+  }
+
+  // ---- connection ----
+
+  function refreshStatus() {
+    var silent = Date.now() - lastEvent > SILENCE_MS;
+    var offline = !connected || silent;
+    $('dot').className = offline ? '' : 'on';
+    document.body.className = offline ? 'offline' : '';
+    var banner = $('banner');
+    if (!connected) { banner.textContent = 'Sin conexión con el PC. Reintentando…'; }
+    else if (silent) { banner.textContent = 'Sin datos recientes del PC'; }
+    banner.className = offline ? 'show' : '';
+  }
+
+  function listen(es, name, fn) {
+    es.addEventListener(name, function (ev) {
+      lastEvent = Date.now();
+      try { fn(JSON.parse(ev.data)); } catch (e) { /* ignore a malformed event */ }
+      refreshStatus();
+    });
+  }
+
+  function connect() {
+    var es = new EventSource('/api/stream');   // reconnects on its own using the server's retry
+    es.onopen = function () { connected = true; lastEvent = Date.now(); refreshStatus(); };
+    es.onerror = function () { connected = false; refreshStatus(); };
+    listen(es, 'hello', function (h) {
+      confirmRequired = h.confirmRequired || [];
+      buildButtons(h.actions || []);
+    });
+    listen(es, 'sensors', renderSensors);
+    listen(es, 'ci', renderCI);
+    listen(es, 'actions', renderActions);
+  }
+
+  // ---- settings ----
+
+  $('gear').addEventListener('click', function () {
+    var f = $('cfg');
+    var open = f.className !== 'show';
+    f.className = open ? 'show' : '';
+    if (open) { $('token').value = ''; $('token').focus(); }
+  });
+  $('cfg').addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    var v = $('token').value.trim();
+    if (v) { setToken(v); toast('Token guardado'); }
+    $('token').value = '';
+    $('cfg').className = '';
+    updateButtonsEnabled();
+  });
+  $('clear').addEventListener('click', function () {
+    setToken('');
+    $('token').value = '';
+    $('cfg').className = '';
+    updateButtonsEnabled();
+    toast('Token borrado');
+  });
+
+  setInterval(refreshStatus, 1000);
+  refreshStatus();
+  connect();
+})();
+</script>
+</body>
+</html>
