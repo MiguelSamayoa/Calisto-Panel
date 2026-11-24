@@ -3,6 +3,7 @@ package hub
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -154,5 +155,110 @@ func TestValidProject(t *testing.T) {
 		if ValidProject(bad) {
 			t.Errorf("ValidProject(%q) = true", bad)
 		}
+	}
+}
+
+func TestMediaAndVMEvents(t *testing.T) {
+	cfg := testConfig()
+	cfg.Actions.Media.Enabled = true
+	cfg.Actions.VMware.Enabled = true
+	h, _ := fakeClock(t, cfg)
+
+	s := h.subscribe()
+	for range 4 { // hello, sensors, ci, processes
+		<-s.ch
+	}
+	var med struct {
+		State  string `json:"state"`
+		Active bool   `json:"active"`
+	}
+	mustDecodeFrame(t, <-s.ch, "media", &med)
+	if med.State != StateUnavailable || med.Active {
+		t.Errorf("before the first poll: %+v", med)
+	}
+	var vm struct {
+		State string `json:"state"`
+	}
+	mustDecodeFrame(t, <-s.ch, "vm", &vm)
+	if vm.State != StateUnavailable {
+		t.Errorf("vm before the first poll: %+v", vm)
+	}
+
+	h.UpdateMedia(MediaUpdate{Active: true, Status: "playing", App: "Spotify", Title: "Song", Artist: "Band", Position: 12.5, Duration: 200})
+	var m struct {
+		State    string  `json:"state"`
+		Active   bool    `json:"active"`
+		Status   string  `json:"status"`
+		Title    string  `json:"title"`
+		Artist   string  `json:"artist"`
+		Position float64 `json:"position"`
+		Duration float64 `json:"duration"`
+	}
+	mustDecodeFrame(t, <-s.ch, "media", &m)
+	if m.State != StateOK || !m.Active || m.Status != "playing" || m.Title != "Song" || m.Artist != "Band" || m.Position != 12.5 || m.Duration != 200 {
+		t.Errorf("media = %+v", m)
+	}
+
+	h.UpdateVM(VMUpdate{Name: "MI_VM", State: "running", CPU: 7.5, Mem: 4e9, Running: 1})
+	var v struct {
+		State   string  `json:"state"`
+		Name    string  `json:"name"`
+		VM      string  `json:"vm"`
+		CPU     float64 `json:"cpu"`
+		Mem     float64 `json:"mem"`
+		Running int     `json:"running"`
+	}
+	mustDecodeFrame(t, <-s.ch, "vm", &v)
+	if v.State != StateOK || v.Name != "MI_VM" || v.VM != "running" || v.CPU != 7.5 || v.Mem != 4e9 || v.Running != 1 {
+		t.Errorf("vm = %+v", v)
+	}
+
+	h.UpdateMedia(MediaUpdate{Fault: StateError}) // reading failed: keep the last data, say why
+	mustDecodeFrame(t, <-s.ch, "media", &m)
+	if m.State != StateError {
+		t.Errorf("after a failed read: %+v", m)
+	}
+}
+
+func TestMediaAndVMOffEmitNothing(t *testing.T) {
+	h, _ := fakeClock(t, testConfig())
+	s := h.subscribe()
+	for range 4 {
+		<-s.ch
+	}
+	select {
+	case f := <-s.ch:
+		t.Errorf("unexpected frame %s", f)
+	default:
+	}
+}
+
+func TestVMStopAlwaysNeedsConfirmation(t *testing.T) {
+	cfg := testConfig() // confirmRequired lists only docker.stop
+	cfg.Actions.VMware.Enabled = true
+	h, _ := fakeClock(t, cfg)
+	s := h.subscribe()
+	var hello struct {
+		Confirm []string `json:"confirmRequired"`
+	}
+	mustDecodeFrame(t, <-s.ch, "hello", &hello)
+	if !slices.Contains(hello.Confirm, "vm.stop") {
+		t.Errorf("confirmRequired = %v, want vm.stop added", hello.Confirm)
+	}
+	if len(cfg.Actions.ConfirmRequired) != 1 {
+		t.Errorf("the config slice was modified: %v", cfg.Actions.ConfirmRequired)
+	}
+}
+
+func TestContainerInfo(t *testing.T) {
+	cfg := testConfig()
+	cfg.Actions.Docker.Enabled = true
+	h, _ := fakeClock(t, cfg)
+	h.UpdateDocker(DockerUpdate{Engine: true, Containers: []Container{{ID: "aaaaaaaaaaaa", Name: "web", Project: "p"}}})
+	if c, ok := h.ContainerInfo("aaaaaaaaaaaa"); !ok || c.Name != "web" {
+		t.Errorf("ContainerInfo = %+v, %v", c, ok)
+	}
+	if _, ok := h.ContainerInfo("bbbbbbbbbbbb"); ok {
+		t.Error("an unlisted container must not be found")
 	}
 }

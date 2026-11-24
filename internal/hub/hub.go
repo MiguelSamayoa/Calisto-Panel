@@ -63,6 +63,12 @@ type Hub struct {
 	dock         domain
 	dockItems    []Container
 	dockEngine   bool
+	med          domain
+	mediaNow     MediaUpdate
+	vmd          domain
+	vmNow        VMUpdate
+	mediaOn      bool
+	vmOn         bool
 	dockerOn     bool
 }
 
@@ -125,6 +131,8 @@ func New(cfg *config.Config, actionIDs []string) (*Hub, error) {
 		sensorIdx: map[string]*sensorEntry{},
 		ciIdx:     map[string]*ciEntry{},
 		dockerOn:  cfg.Actions.Docker.Enabled,
+		mediaOn:   cfg.Actions.Media.Enabled,
+		vmOn:      cfg.Actions.VMware.Enabled,
 	}
 	stale := time.Duration(cfg.Server.StaleMs) * time.Millisecond
 	dead := time.Duration(cfg.Server.DeadMs) * time.Millisecond
@@ -150,6 +158,10 @@ func New(cfg *config.Config, actionIDs []string) (*Hub, error) {
 	confirm := cfg.Actions.ConfirmRequired
 	if confirm == nil {
 		confirm = []string{}
+	}
+	confirm = slices.Clone(confirm)
+	if cfg.Actions.VMware.Enabled && !slices.Contains(confirm, "vm.stop") {
+		confirm = append(confirm, "vm.stop") // shutting the VM down always asks twice
 	}
 	dynamic := []string{}
 	if cfg.Actions.Docker.Enabled {

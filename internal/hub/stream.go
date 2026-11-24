@@ -50,6 +50,12 @@ func (h *Hub) subscribe() *subscriber {
 	if h.dockerOn {
 		s.ch <- frame("docker", h.dockerPayloadLocked())
 	}
+	if h.mediaOn {
+		s.ch <- frame("media", h.mediaPayloadLocked())
+	}
+	if h.vmOn {
+		s.ch <- frame("vm", h.vmPayloadLocked())
+	}
 	if len(h.actions) > 0 {
 		s.ch <- frame("actions", h.actionsPayloadLocked())
 	}
