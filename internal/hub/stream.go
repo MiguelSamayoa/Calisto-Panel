@@ -46,6 +46,10 @@ func (h *Hub) subscribe() *subscriber {
 	s.ch <- frame("hello", h.hello)
 	s.ch <- frame("sensors", h.sensorsPayloadLocked())
 	s.ch <- frame("ci", h.ciPayloadLocked())
+	s.ch <- frame("processes", h.processesPayloadLocked())
+	if h.dockerOn {
+		s.ch <- frame("docker", h.dockerPayloadLocked())
+	}
 	if len(h.actions) > 0 {
 		s.ch <- frame("actions", h.actionsPayloadLocked())
 	}

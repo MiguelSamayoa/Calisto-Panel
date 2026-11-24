@@ -33,6 +33,8 @@ type harness struct {
 	block   chan struct{} // when non-nil, Run waits for it or ctx
 	runErr  error
 	now     time.Time
+	known   map[string]bool     // container ids the fake hub has listed
+	project map[string][]string // compose project -> container ids
 	ex      *Executor
 	done    chan struct{}
 }
@@ -71,7 +73,9 @@ func newHarness(t *testing.T, cfg config.Actions) *harness {
 				h.done <- struct{}{}
 			}
 		},
-		Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Log:               slog.New(slog.NewTextHandler(io.Discard, nil)),
+		HasContainer:      func(id string) bool { return h.known[id] },
+		ProjectContainers: func(name string) []string { return h.project[name] },
 	})
 	h.ex.now = func() time.Time { h.mu.Lock(); defer h.mu.Unlock(); return h.now }
 	return h
@@ -246,5 +250,126 @@ func TestExecID(t *testing.T) {
 	b := newExecID(time.UnixMilli(1_700_000_002_000))
 	if len(a) != 10 || a >= b {
 		t.Errorf("ids %q %q: want 10 chars and increasing", a, b)
+	}
+}
+
+func TestContainerActionsOnlyForObservedIDs(t *testing.T) {
+	h := newHarness(t, testCfg())
+	h.known = map[string]bool{"abcdef012345": true}
+
+	for _, id := range []string{
+		"container.start.000000000000",     // well-formed but never listed
+		"container.stop.abcdef01234",       // 11 digits
+		"container.stop.abcdef0123456",     // 13 digits
+		"container.stop.ABCDEF012345",      // upper case
+		"container.stop.--rm",              // would look like a flag
+		"container.stop.abcdef012345 --rm", // argument smuggling
+		"container.restart.abcdef012345",   // verb outside the whitelist
+		"container.rm.abcdef012345",
+		"container.start.",
+	} {
+		if _, err := h.ex.Do(id); !errors.Is(err, ErrUnknown) {
+			t.Errorf("Do(%q) err = %v, want ErrUnknown", id, err)
+		}
+	}
+	if len(h.argvs) != 0 || len(h.reports) != 0 {
+		t.Fatalf("rejected ids had side effects: %v %v", h.argvs, h.reports)
+	}
+
+	for verb, wantArgv := range map[string][]string{
+		"start": {"docker", "start", "abcdef012345"},
+		"stop":  {"docker", "stop", "abcdef012345"},
+	} {
+		h.advance(3 * time.Second) // stay clear of the global rate limit
+		st, err := h.ex.Do("container." + verb + ".abcdef012345")
+		if err != nil || st.Action != "container."+verb+".abcdef012345" {
+			t.Fatalf("%s: %+v, %v", verb, st, err)
+		}
+		h.waitDone(t)
+		h.mu.Lock()
+		got := h.argvs[len(h.argvs)-1]
+		h.mu.Unlock()
+		if !reflect.DeepEqual(got, wantArgv) {
+			t.Errorf("%s argv = %q, want %q", verb, got, wantArgv)
+		}
+	}
+}
+
+func TestContainerActionsNeedDockerEnabled(t *testing.T) {
+	cfg := testCfg()
+	cfg.Docker.Enabled = false
+	h := newHarness(t, cfg)
+	h.known = map[string]bool{"abcdef012345": true}
+	if _, err := h.ex.Do("container.stop.abcdef012345"); !errors.Is(err, ErrUnknown) {
+		t.Errorf("err = %v, want ErrUnknown with docker disabled", err)
+	}
+}
+
+func TestContainerActionIsExclusivePerContainer(t *testing.T) {
+	h := newHarness(t, testCfg())
+	h.known = map[string]bool{"abcdef012345": true, "fedcba543210": true}
+	h.block = make(chan struct{})
+	if _, err := h.ex.Do("container.stop.abcdef012345"); err != nil {
+		t.Fatal(err)
+	}
+	h.advance(3 * time.Second)
+	var busy *AlreadyRunningError
+	if _, err := h.ex.Do("container.stop.abcdef012345"); !errors.As(err, &busy) {
+		t.Errorf("same container twice: err = %v, want AlreadyRunningError", err)
+	}
+	if _, err := h.ex.Do("container.stop.fedcba543210"); err != nil {
+		t.Errorf("another container must not be blocked: %v", err)
+	}
+	close(h.block)
+	h.waitDone(t)
+	h.waitDone(t)
+}
+
+func TestProjectActionsUseObservedContainerIDs(t *testing.T) {
+	h := newHarness(t, testCfg())
+	h.project = map[string][]string{"forms-dev": {"aaaaaaaaaaaa", "bbbbbbbbbbbb"}}
+
+	for _, id := range []string{
+		"project.start.unknown",
+		"project.stop.",
+		"project.restart.forms-dev",
+		"project.stop.Forms-Dev",
+		"project.stop.forms-dev --rm",
+		"project.stop.forms-dev;calc",
+		"project.stop.../x",
+	} {
+		if _, err := h.ex.Do(id); !errors.Is(err, ErrUnknown) {
+			t.Errorf("Do(%q) err = %v, want ErrUnknown", id, err)
+		}
+	}
+	if len(h.argvs) != 0 || len(h.reports) != 0 {
+		t.Fatalf("rejected ids had side effects: %v %v", h.argvs, h.reports)
+	}
+
+	for verb, want := range map[string][]string{
+		"start": {"docker", "start", "aaaaaaaaaaaa", "bbbbbbbbbbbb"},
+		"stop":  {"docker", "stop", "aaaaaaaaaaaa", "bbbbbbbbbbbb"},
+	} {
+		h.advance(3 * time.Second)
+		if _, err := h.ex.Do("project." + verb + ".forms-dev"); err != nil {
+			t.Fatalf("%s: %v", verb, err)
+		}
+		h.waitDone(t)
+		h.mu.Lock()
+		got := h.argvs[len(h.argvs)-1]
+		h.mu.Unlock()
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("%s argv = %q, want %q", verb, got, want)
+		}
+	}
+}
+
+func TestProjectActionsNeedDockerEnabled(t *testing.T) {
+	cfg := testCfg()
+	cfg.Docker.Enabled = false
+	h := newHarness(t, cfg)
+	h.project = map[string][]string{"forms-dev": {"aaaaaaaaaaaa"}}
+	if _, err := h.ex.Do("project.stop.forms-dev"); !errors.Is(err, ErrUnknown) {
+		t.Errorf("err = %v, want ErrUnknown with docker disabled", err)
 	}
 }

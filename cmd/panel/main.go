@@ -61,6 +61,9 @@ func run(configPath string) error {
 		Keys:   winutil.SendMediaKey,
 		Report: func(u hub.ActionUpdate) { h.UpdateAction(u) },
 		Log:    log,
+		// h is assigned just below, before the server can accept a request.
+		HasContainer:      func(id string) bool { return h.HasContainer(id) },
+		ProjectContainers: func(name string) []string { return h.ProjectContainers(name) },
 	})
 	if h, err = hub.New(cfg, exec.IDs()); err != nil {
 		return err
@@ -74,12 +77,18 @@ func run(configPath string) error {
 	}
 
 	var pollers sync.WaitGroup
-	pollers.Add(1)
-	go func() {
-		defer pollers.Done()
+	start := func(f func()) {
+		pollers.Add(1)
+		go func() { defer pollers.Done(); f() }()
+	}
+	start(func() {
 		client := lhm.NewClient(cfg.Sensors.URL, time.Duration(cfg.Sensors.TimeoutMs)*time.Millisecond)
 		pollSensors(ctx, cfg.Sensors, client, h, log)
-	}()
+	})
+	start(func() { pollProcesses(ctx, cfg.Processes, os.Getenv("SystemRoot"), h, log) })
+	if cfg.Actions.Docker.Enabled {
+		start(func() { pollDocker(ctx, cfg.Containers, winutil.Output, h, log) })
+	}
 
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- srv.ListenAndServe() }()

@@ -19,7 +19,45 @@ type Config struct {
 	Sensors     Sensors `yaml:"sensors"`
 	CI          CI      `yaml:"ci"`
 	Actions     Actions `yaml:"actions"`
-	Secrets     Secrets `yaml:"-"`
+	// Processes and Containers are optional: absent sections take the defaults below.
+	Processes  Processes  `yaml:"processes"`
+	Containers Containers `yaml:"containers"`
+	Secrets    Secrets    `yaml:"-"`
+}
+
+// Processes configures the "apps that consume the most" poller. A process is an app
+// when its image lives outside SystemRoot; Exclude drops noisy ones by file name and
+// IncludeUnreadable keeps named processes whose path cannot be read (vmmem for WSL2).
+type Processes struct {
+	IntervalMs        int      `yaml:"interval_ms"`
+	TopN              int      `yaml:"top_n"`
+	Exclude           []string `yaml:"exclude"`
+	IncludeUnreadable []string `yaml:"include_unreadable"`
+}
+
+// Containers configures the Docker container poller. It runs only when
+// actions.docker.enabled is true.
+type Containers struct {
+	IntervalMs int `yaml:"interval_ms"`
+	TimeoutMs  int `yaml:"timeout_ms"`
+}
+
+func (c *Config) applyDefaults() {
+	if c.Processes.IntervalMs == 0 {
+		c.Processes.IntervalMs = 5000
+	}
+	if c.Processes.TopN == 0 {
+		c.Processes.TopN = 5
+	}
+	if c.Processes.IncludeUnreadable == nil {
+		c.Processes.IncludeUnreadable = []string{"vmmem", "vmmemWSL"}
+	}
+	if c.Containers.IntervalMs == 0 {
+		c.Containers.IntervalMs = 5000
+	}
+	if c.Containers.TimeoutMs == 0 {
+		c.Containers.TimeoutMs = 8000
+	}
 }
 
 type Server struct {
@@ -125,6 +163,7 @@ func Load(path string) (*Config, error) {
 	if err := decodeFile(cfg.SecretsFile, &cfg.Secrets); err != nil {
 		return nil, fmt.Errorf("loading secrets: %w", err)
 	}
+	cfg.applyDefaults()
 	if err := cfg.validate(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
@@ -165,6 +204,10 @@ func (c *Config) validate() error {
 		"ci.error_backoff_max_ms": c.CI.ErrorBackoffMaxMs,
 		"actions.timeout_ms":      c.Actions.TimeoutMs,
 		"actions.rate_limit_ms":   c.Actions.RateLimitMs,
+		"processes.interval_ms":   c.Processes.IntervalMs,
+		"processes.top_n":         c.Processes.TopN,
+		"containers.interval_ms":  c.Containers.IntervalMs,
+		"containers.timeout_ms":   c.Containers.TimeoutMs,
 	} {
 		if v <= 0 {
 			bad("%s must be positive", name)

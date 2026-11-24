@@ -52,6 +52,29 @@ sensors:
       sensor_id: "/nic/%7BGUID%7D/throughput/8" # REEMPLAZAR
 
 # ---------------------------------------------------------------------------
+# Apps que más consumen (panel Sistema)
+# ---------------------------------------------------------------------------
+# Una "app" es un ejecutable cuya ruta NO está bajo %SystemRoot%; sus procesos se
+# suman por nombre (Chrome = todos sus procesos). Toda la sección es opcional: sin
+# ella se usan estos valores.
+processes:
+  interval_ms: 5000
+  top_n: 5                 # el panel muestra el top N por CPU y el top N por RAM
+  exclude: []              # nombres a ocultar, p. ej. ["panel.exe", "LibreHardwareMonitor.exe"]
+  # Procesos cuya ruta Windows no deja leer sin elevación pero que sí cuentan como
+  # app. vmmem / vmmemWSL es la VM de WSL2, donde vive el consumo real de Docker.
+  include_unreadable: ["vmmem", "vmmemWSL"]
+
+# ---------------------------------------------------------------------------
+# Contenedores Docker (panel Docker)
+# ---------------------------------------------------------------------------
+# Solo se sondea si actions.docker.enabled es true. Usa `docker ps -a` y
+# `docker stats --no-stream` con argv fijo (stats tarda 1-2 s). Opcional.
+containers:
+  interval_ms: 5000
+  timeout_ms: 8000
+
+# ---------------------------------------------------------------------------
 # Integración continua
 # ---------------------------------------------------------------------------
 # interval_ms admitidos: 60000 o 150000. Una sola petición por ciclo para todos los
@@ -84,6 +107,8 @@ actions:
   confirm_required:
     - "docker.stop"
     - "vm.suspend"
+    - "container.stop"     # cubre container.stop.<id> de cualquier contenedor
+    - "project.stop"       # cubre project.stop.<nombre> (con Docker habilitado se exigen aunque falten aquí)
 
   docker:
     enabled: true

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -39,6 +40,12 @@ type Deps struct {
 	Keys   func(vk uint8) error
 	Report func(hub.ActionUpdate)
 	Log    *slog.Logger
+	// HasContainer reports whether the server itself listed this container id in its
+	// last poll. Nil means no container is known.
+	HasContainer func(id string) bool
+	// ProjectContainers returns the container ids of a compose project as the server
+	// listed them in its last poll (nil when unknown).
+	ProjectContainers func(project string) []string
 }
 
 // spec is either a process (argv) or a media key (vk); never both.
@@ -57,6 +64,7 @@ type Executor struct {
 	timeout   time.Duration
 	rateLimit time.Duration
 	now       func() time.Time
+	docker    bool // container.start|stop.<id> are accepted
 
 	mu      sync.Mutex
 	running map[string]string // action id -> exec id
@@ -75,6 +83,7 @@ func New(base context.Context, cfg config.Actions, deps Deps) *Executor {
 		rateLimit: time.Duration(cfg.RateLimitMs) * time.Millisecond,
 		now:       time.Now,
 		running:   map[string]string{},
+		docker:    cfg.Docker.Enabled,
 	}
 	add := func(id string, s spec) {
 		e.specs[id] = s
@@ -105,7 +114,7 @@ func (e *Executor) Wait() { e.wg.Wait() }
 // Do validates in the contract order (404, 409, 429; 401 is the caller's), starts
 // the action in the background and returns immediately.
 func (e *Executor) Do(id string) (Started, error) {
-	s, ok := e.specs[id]
+	s, ok := e.resolve(id)
 	if !ok {
 		return Started{}, ErrUnknown
 	}
@@ -129,6 +138,49 @@ func (e *Executor) Do(id string) (Started, error) {
 	e.deps.Report(hub.ActionUpdate{ID: id, Exec: exec, State: hub.ActionRunning})
 	go e.execute(id, exec, s, now)
 	return Started{Exec: exec, Action: id, State: hub.ActionRunning}, nil
+}
+
+// resolve maps an action id to what to run. Besides the fixed ids it accepts
+// container.start.<cid> and container.stop.<cid>, where cid must be a 12-digit hex
+// short id that the server itself listed in its last docker poll, and
+// project.start.<name> and project.stop.<name>, where name must be a compose project
+// the server listed. The argv is built here; its only variable parts are container ids
+// the server itself obtained and validated. The client supplies nothing else.
+func (e *Executor) resolve(id string) (spec, bool) {
+	if s, ok := e.specs[id]; ok {
+		return s, true
+	}
+	if !e.docker {
+		return spec{}, false
+	}
+	for _, verb := range []string{"start", "stop"} {
+		name, ok := strings.CutPrefix(id, "project."+verb+".")
+		if !ok {
+			continue
+		}
+		if !hub.ValidProject(name) || e.deps.ProjectContainers == nil {
+			return spec{}, false
+		}
+		ids := e.deps.ProjectContainers(name)
+		if len(ids) == 0 {
+			return spec{}, false
+		}
+		return spec{argv: append([]string{"docker", verb}, ids...)}, true
+	}
+	if e.deps.HasContainer == nil {
+		return spec{}, false
+	}
+	for _, verb := range []string{"start", "stop"} {
+		cid, ok := strings.CutPrefix(id, "container."+verb+".")
+		if !ok {
+			continue
+		}
+		if !hub.ValidContainerID(cid) || !e.deps.HasContainer(cid) {
+			return spec{}, false
+		}
+		return spec{argv: []string{"docker", verb, cid}}, true
+	}
+	return spec{}, false
 }
 
 func (e *Executor) execute(id, exec string, s spec, began time.Time) {

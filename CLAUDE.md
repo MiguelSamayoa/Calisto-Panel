@@ -78,7 +78,7 @@ ruta canónica y el `Makefile` es una comodidad, no la fuente de verdad.
 ```
 GET  /                 → web/index.html
 GET  /healthz          → 200 {"ok":true}
-GET  /api/stream       → text/event-stream; eventos: hello, sensors, ci, actions
+GET  /api/stream       → text/event-stream; eventos: hello, sensors, processes, docker, ci, actions
 POST /api/do/{id}      → 202 {"exec":"...","action":"...","state":"running"}
                          401 unauthorized | 404 unknown_action
                          409 already_running | 429 rate_limited
@@ -86,6 +86,10 @@ POST /api/do/{id}      → 202 {"exec":"...","action":"...","state":"running"}
 
 Payload de ítem de sensor: `{id, label, value: float64, unit: string, state}`.
 Payload de ítem de CI: `{id, label, state, result, build, finished, url}`.
+`processes` y `docker` son de lista dinámica: `state` va en el sobre, no en cada ítem.
+Ítem de proceso: `{id, label, cpu, mem, count}`. Ítem de contenedor:
+`{id, project, name, image, status, state, ports, cpu, mem, memLimit, pids}`. Detalle en
+`docs/ARCHITECTURE.md` §3.
 
 `state` responde a "¿puedo confiar en este dato?" → `ok|stale|dead|unavailable|auth|error`.
 `result` responde a "¿qué dice el dato?" y solo existe en CI.
@@ -97,6 +101,7 @@ unidades de presentación, colores ni texto de interfaz.
 
 - `sensors`: cada **5 s**.
 - `ci`: cada **60 s**, configurable a **150 s**. Con backoff a 5 min tras error.
+- `processes`: cada **5 s**. `docker`: cada **5 s**, solo si Docker está habilitado.
 - `actions`: solo como respuesta a una ejecución. Nunca por sondeo.
 - Comentario `: keepalive` en el stream cada 15 s, y `retry: 3000`.
 
@@ -113,11 +118,19 @@ no los dupliques como constantes en el código.
 
 1. **Lista blanca cerrada de acciones.** Los IDs válidos son exactamente:
    `docker.start`, `docker.stop`, `vm.suspend`, `vm.start`, `media.playpause`,
-   `media.next`. Nunca añadas un endpoint que ejecute un comando, ruta o argumento
-   proveniente del cliente.
+   `media.next`, más cuatro familias de Docker (D-31): `container.start.<id>`,
+   `container.stop.<id>`, `project.start.<nombre>` y `project.stop.<nombre>`. `<id>` debe
+   ser exactamente 12 dígitos hexadecimales en minúscula **y** figurar en la lista de
+   contenedores que el propio servidor obtuvo en su último sondeo de `docker ps`;
+   `<nombre>` debe ser un proyecto de Compose de esa misma lista (nunca entra al `argv`:
+   el servidor usa los IDs que él mismo listó para ese proyecto). Si no, `404
+   unknown_action`. Verbos: solo `start` y `stop`. Nunca añadas un endpoint que ejecute un
+   comando, ruta o argumento proveniente del cliente; esas familias son la única
+   excepción.
 2. **`exec.Command` con argv fijo** armado desde `config.yaml`. Jamás `cmd /c`,
    `powershell -Command`, `sh -c` ni concatenación de cadenas en un comando.
-3. El cliente envía **solo un ID de acción**. Sin parámetros, sin cuerpo significativo.
+3. El cliente envía **solo un ID de acción** (el sufijo de contenedor forma parte del ID).
+   Sin parámetros, sin cuerpo significativo.
 4. **Nunca registres ni devuelvas** el valor de `api_token` ni de `azure_devops_pat`,
    ni completos ni truncados, ni en errores, ni en `/healthz`, ni en modo depuración.
 5. **El token nunca viaja en la URL** ni en query string. Solo en el encabezado
@@ -128,7 +141,7 @@ no los dupliques como constantes en el código.
    en tiempo constante (`crypto/subtle.ConstantTimeCompare`).
 8. Límite de frecuencia en `POST`: máximo 1 acción cada 2 s en total, y una ejecución
    concurrente por ID de acción (de ahí el `409`).
-9. Las acciones destructivas (`docker.stop`, `vm.suspend`) exigen **doble confirmación en
+9. Las acciones destructivas (`docker.stop`, `vm.suspend`, `container.stop`, `project.stop`) exigen **doble confirmación en
    el cliente**. Esa confirmación es de interfaz, no de protocolo: no inventes un
    parámetro `confirm` en la API.
 10. El servicio corre **sin elevación**. Si algo parece necesitar privilegios de

@@ -18,43 +18,122 @@
     --run: #4a90d9;
   }
   * { box-sizing: border-box; }
-  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); overflow: hidden; }
   body {
-    font: 16px/1.3 system-ui, sans-serif;
-    padding: 12px;
+    font: 15px/1.3 system-ui, sans-serif;
+    padding: 6px 10px 8px;
+    height: 100vh; height: 100dvh;
+    display: flex; flex-direction: column;
     -webkit-user-select: none; user-select: none;
     -webkit-tap-highlight-color: transparent;
   }
-  header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
-  header h1 { font-size: 1rem; font-weight: 600; margin: 0; flex: 1; letter-spacing: .04em; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+
+  /* ---- header: connection dot, page tabs, settings ---- */
+  header { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; flex: none; }
+  header h1 { font-size: .9rem; font-weight: 600; margin: 0; letter-spacing: .06em; }
   #dot { width: 10px; height: 10px; border-radius: 50%; background: var(--bad); }
   #dot.on { background: var(--ok); }
-  button { font: inherit; color: inherit; cursor: pointer; }
-  #gear { background: none; border: 1px solid var(--line); border-radius: 8px; width: 40px; height: 40px; font-size: 1.2rem; }
+  #tabs { flex: 1; display: flex; gap: 6px; justify-content: center; }
+  #tabs button { background: none; border: 0; border-bottom: 2px solid transparent; color: var(--dim); padding: 6px 14px; font-size: .85rem; letter-spacing: .04em; }
+  #tabs button.on { color: var(--text); border-bottom-color: var(--run); }
+  #gear { background: none; border: 1px solid var(--line); border-radius: 8px; width: 36px; height: 36px; font-size: 1.1rem; }
 
-  #banner { display: none; margin-bottom: 12px; padding: 10px 12px; border: 1px solid var(--warn); color: var(--warn); border-radius: 8px; }
+  #banner { display: none; margin-bottom: 6px; padding: 6px 10px; border: 1px solid var(--warn); color: var(--warn); border-radius: 8px; font-size: .85rem; flex: none; }
   #banner.show { display: block; }
-
-  #cfg { display: none; margin-bottom: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; gap: 8px; }
+  #cfg { display: none; margin-bottom: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; gap: 8px; flex: none; }
   #cfg.show { display: flex; flex-wrap: wrap; }
-  #cfg input { flex: 1 1 200px; min-width: 0; background: #111; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 10px; font: inherit; -webkit-user-select: text; user-select: text; }
-  #cfg button { border: 1px solid var(--line); background: #151515; border-radius: 6px; padding: 10px 14px; }
+  #cfg input { flex: 1 1 200px; min-width: 0; background: #111; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 8px; font: inherit; -webkit-user-select: text; user-select: text; }
+  #cfg button { border: 1px solid var(--line); background: #151515; border-radius: 6px; padding: 8px 14px; }
 
-  h2 { font-size: .75rem; font-weight: 600; color: var(--dim); text-transform: uppercase; letter-spacing: .08em; margin: 18px 0 8px; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
-  .offline .grid#tiles { opacity: .35; }
+  /* ---- pager: three panels side by side, swipe snaps to one ---- */
+  #pager {
+    flex: 1; min-height: 0;
+    display: flex;
+    overflow-x: auto; overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+  #pager::-webkit-scrollbar { display: none; }
+  .page { flex: 0 0 100%; min-width: 0; scroll-snap-align: start; scroll-snap-stop: always; overflow-y: auto; padding: 0 2px; }
+  .offline .page { opacity: .4; }
 
-  .tile { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+  h2 { font-size: .7rem; font-weight: 600; color: var(--dim); text-transform: uppercase; letter-spacing: .08em; margin: 0 0 6px; }
+  .empty { color: var(--dim); padding: 14px; border: 1px dashed var(--line); border-radius: 10px; text-align: center; }
+
+  /* ---- panel 1: system (left two thirds) and apps + media (right third) ---- */
+  #p0 { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: 12px; overflow: hidden; }
+  .col { display: flex; flex-direction: column; gap: 6px; min-height: 0; min-width: 0; }
+  #tiles { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: minmax(0, 1fr); gap: 8px; }
+  .tile:last-child:nth-child(odd) { grid-column: 1 / -1; }   /* a lone last tile takes the full row */
+  .tile { min-height: 0; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 6px 12px; display: flex; flex-direction: column; justify-content: center; }
   .tile .label { color: var(--dim); font-size: .8rem; }
-  .tile .value { font-size: 2rem; font-weight: 600; margin: 4px 0 2px; white-space: nowrap; }
-  .tile .sub { font-size: .75rem; color: var(--dim); min-height: 1em; }
-  .tile.stale .value { color: var(--dim); }
-  .tile.dead .value { color: var(--dim); text-decoration: line-through; }
-  .tile.unavailable .value, .tile.auth .value, .tile.error .value { color: var(--dim); }
+  .tile .value { font-size: 2.4rem; font-weight: 600; margin: 0; white-space: nowrap; line-height: 1.1; }
+  .tile .sub { font-size: .7rem; color: var(--dim); min-height: 1em; }
+  .tile.stale .value, .tile.dead .value, .tile.unavailable .value, .tile.auth .value, .tile.error .value { color: var(--dim); }
+  .tile.dead .value { text-decoration: line-through; }
   .tile.auth .sub, .tile.error .sub { color: var(--bad); }
 
+  #apps { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+  #apps.stale, #apps.dead, #apps.error, #apps.unavailable { opacity: .45; }
+  .applist { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+  .applist h3 { margin: 0; font-size: .7rem; font-weight: 600; color: var(--dim); letter-spacing: .06em; }
+  .applist > div { display: flex; flex-direction: column; gap: 7px; }
+  .app { min-width: 0; }
+  .app .row { display: flex; justify-content: space-between; gap: 6px; font-size: .85rem; }
+  .app .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .app .val { color: var(--dim); white-space: nowrap; }
+  .bar { height: 4px; background: #1a1a1a; border-radius: 2px; margin-top: 2px; overflow: hidden; }
+  .bar > i { display: block; height: 100%; background: var(--run); }
+  .bar.mem > i { background: var(--ok); }
+  .quiet { color: var(--dim); font-size: .8rem; padding: 6px 0; }
+
+  #ctrl { flex: none; display: flex; gap: 8px; }
+  #ctrl .act { min-width: 0; }
+  #ctrl .act { flex: 1; }
+
+  /* ---- action buttons (shared) ---- */
+  .act { background: #151515; border: 1px solid var(--line); border-radius: 10px; min-height: 52px; min-width: 96px; padding: 6px 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; }
+  #ctrl .act { flex: 1 1 96px; }
+  .act:disabled { opacity: .35; cursor: default; }
+  .act .name { font-weight: 600; }
+  .act .st { font-size: .7rem; color: var(--dim); min-height: 1em; }
+  .act.armed { border-color: var(--warn); color: var(--warn); }
+  .act.running .st { color: var(--run); }
+  .act.ok .st { color: var(--ok); }
+  .act.failed .st, .act.timeout .st { color: var(--bad); }
+
+  /* ---- panel 2: docker ---- */
+  #p1 { display: flex; flex-direction: column; gap: 8px; }
+  #dockerBar { display: flex; align-items: center; gap: 10px; flex: none; }
+  #dockerBar h2 { margin: 0; }
+  #engine { font-size: .8rem; font-weight: 600; padding: 3px 10px; border-radius: 999px; border: 1px solid currentColor; color: var(--dim); }
+  #engine.up { color: var(--ok); }
+  #dockerActs { margin-left: auto; display: flex; gap: 8px; }
+  #dockerActs .act { min-height: 44px; }
+  #containers { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 8px; align-content: start; }
+  #containers.stale, #containers.dead, #containers.error { opacity: .45; }
+  .ctr { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .ctr .top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+  .ctr .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ctr .sub { color: var(--dim); font-size: .72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ctr .badge { font-size: .72rem; white-space: nowrap; color: var(--dim); }
+  .ctr.running > .top .badge { color: var(--ok); }
+  .ctr.paused > .top .badge { color: var(--warn); }
+  .ctr .meters { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; font-size: .75rem; min-height: 2.4em; }
+  .ctr .meters div { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ctr .act { min-height: 40px; flex-direction: row; gap: 8px; margin-top: 2px; }
+  .ctr.group.wide { grid-column: 1 / -1; }
+  .ctr .grow { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .ctr .grow .act { min-width: 0; padding: 4px 8px; }
+  .ctr .grow .act.toggle { grid-column: 1 / -1; min-height: 32px; color: var(--dim); }
+  .children { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 6px; margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--line); }
+  .ctr.child { background: #0a0a0a; }
+
+  /* ---- panel 3: pipelines ---- */
   #ci { display: flex; flex-direction: column; gap: 8px; }
-  .ci { display: flex; align-items: center; gap: 10px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+  .ci { display: flex; align-items: center; gap: 10px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
   .ci .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ci .build { color: var(--dim); font-size: .75rem; }
   .chip { font-size: .85rem; font-weight: 600; padding: 4px 10px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
@@ -65,26 +144,35 @@
   .chip.queued, .chip.canceled, .chip.none { color: var(--dim); }
   .ci.stale .chip, .ci.dead .chip { color: var(--dim); }
   .ci.dead .name { text-decoration: line-through; }
-  .empty { color: var(--dim); padding: 12px; border: 1px dashed var(--line); border-radius: 10px; }
+  #p2 { display: flex; flex-direction: column; gap: 8px; }
+  #vmBar { display: flex; align-items: center; gap: 10px; flex: none; }
+  #vmBar h2 { margin: 0; }
+  #vmActs { margin-left: auto; display: flex; gap: 8px; }
+  #vmActs .act { min-height: 44px; }
+  #p2 h2.ciTitle { margin: 4px 0 0; flex: none; }
+  #p2 #ci { flex: 1; min-height: 0; }
+  #ciWait { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; flex: 1; min-height: 120px; color: var(--dim); text-align: center; }
+  #ciWait b { font-size: 1.1rem; color: var(--text); font-weight: 600; }
 
-  #actions { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
-  .act { background: #151515; border: 1px solid var(--line); border-radius: 10px; min-height: 64px; padding: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
-  .act:disabled { opacity: .35; cursor: default; }
-  .act .name { font-weight: 600; }
-  .act .st { font-size: .75rem; color: var(--dim); min-height: 1em; }
-  .act.armed { border-color: var(--warn); color: var(--warn); }
-  .act.running .st { color: var(--run); }
-  .act.ok .st { color: var(--ok); }
-  .act.failed .st, .act.timeout .st { color: var(--bad); }
-
-  #toast { position: fixed; left: 12px; right: 12px; bottom: 12px; padding: 12px; background: #1a1a1a; border: 1px solid var(--line); border-radius: 8px; display: none; }
+  #toast { position: fixed; left: 12px; right: 12px; bottom: 12px; padding: 10px 12px; background: #1a1a1a; border: 1px solid var(--line); border-radius: 8px; display: none; }
   #toast.show { display: block; }
+
+  /* Portrait fallback: the panels are designed for landscape, but stay usable. */
+  @media (max-width: 700px) {
+    #p0 { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; }
+    #tabs button { padding: 6px 8px; }
+  }
 </style>
 </head>
 <body>
 <header>
   <span id="dot"></span>
   <h1>CALISTO</h1>
+  <nav id="tabs">
+    <button type="button" class="on">Sistema</button>
+    <button type="button">Docker</button>
+    <button type="button">Pipelines</button>
+  </nav>
   <button id="gear" type="button" aria-label="Ajustes">&#9881;</button>
 </header>
 
@@ -96,14 +184,40 @@
   <button type="button" id="clear">Borrar</button>
 </form>
 
-<h2>Sistema</h2>
-<div id="tiles" class="grid"></div>
+<main id="pager">
+  <section class="page" id="p0" aria-label="Sistema">
+    <div class="col">
+      <h2>Sistema</h2>
+      <div id="tiles"></div>
+    </div>
+    <div class="col">
+      <h2>Apps que más consumen · más del 10 %</h2>
+      <div id="apps">
+        <div class="applist"><h3>CPU</h3><div id="appsCpu"></div></div>
+        <div class="applist"><h3>RAM</h3><div id="appsMem"></div></div>
+      </div>
+      <div id="ctrl"></div>
+    </div>
+  </section>
 
-<h2>Pipelines</h2>
-<div id="ci"></div>
+  <section class="page" id="p1" aria-label="Docker">
+    <div id="dockerBar">
+      <h2>Docker</h2>
+      <span id="engine">—</span>
+      <div id="dockerActs"></div>
+    </div>
+    <div id="containers"></div>
+  </section>
 
-<h2>Acciones</h2>
-<div id="actions" class="grid"></div>
+  <section class="page" id="p2" aria-label="Pipelines">
+    <div id="vmBar">
+      <h2>Máquina virtual</h2>
+      <div id="vmActs"></div>
+    </div>
+    <h2 class="ciTitle">Pipelines</h2>
+    <div id="ci"></div>
+  </section>
+</main>
 
 <div id="toast" role="status" aria-live="polite"></div>
 
@@ -112,31 +226,27 @@
   'use strict';
 
   var TOKEN_KEY = 'calistoToken';
+  var PAGE_KEY = 'calistoPage';
   var SILENCE_MS = 20000;      // sensors arrive every 5 s; this long without events = offline
   var CONFIRM_MS = 3000;       // window for the second tap on a destructive action
 
   var ACTION_NAMES = {
-    'docker.start': 'Docker ▶',
-    'docker.stop': 'Docker ■',
+    'docker.start': '▶ Encender',
+    'docker.stop': '■ Apagar',
     'vm.start': 'VM ▶',
     'vm.suspend': 'VM ⏸',
     'media.playpause': '⏯',
     'media.next': '⏭'
   };
+  var PLACE = { 'docker.start': 'dockerActs', 'docker.stop': 'dockerActs', 'vm.start': 'vmActs', 'vm.suspend': 'vmActs' };   // everything else: ctrl
+  var THRESHOLD = 10;          // apps below this share (% of CPU, % of RAM) are not listed
   var RESULT_TEXT = {
-    succeeded: 'OK ✓',
-    partiallySucceeded: 'Parcial !',
-    failed: 'Falló ✗',
-    canceled: 'Cancelado',
-    running: 'En curso…',
-    queued: 'En cola'
+    succeeded: 'OK ✓', partiallySucceeded: 'Parcial !', failed: 'Falló ✗',
+    canceled: 'Cancelado', running: 'En curso…', queued: 'En cola'
   };
   var STATE_TEXT = {
-    stale: 'dato viejo',
-    dead: 'sin datos',
-    unavailable: 'no disponible',
-    auth: 'renueva el PAT',
-    error: 'error de la fuente'
+    stale: 'dato viejo', dead: 'sin datos', unavailable: 'no disponible',
+    auth: 'renueva el PAT', error: 'error de la fuente'
   };
   var ACTION_STATE_TEXT = { running: '…', ok: '✓', failed: '✗', timeout: 'tiempo agotado' };
 
@@ -145,9 +255,15 @@
   var connected = false;
   var tiles = {};              // sensor id -> {el, value, sub}
   var tileIds = '';
-  var buttons = {};            // action id -> {el, st, armed timer}
+  var buttons = {};            // static action id -> ui
+  var expanded = {};           // compose project -> true while its containers are shown
+  var dockUIs = [];            // buttons of the last docker render
   var confirmRequired = [];
-  var actionStates = {};       // action id -> {state, message}
+  var liveActions = {};        // action id -> latest item of the actions event
+  var armTimers = {};          // action id -> {ui, timer} of the "¿Confirmar?" window
+  var dockerEnabled = false;
+  var lastDocker = null;
+  var topShown = 5;
 
   function getToken() {
     try { return localStorage.getItem(TOKEN_KEY) || ''; } catch (e) { return ''; }
@@ -167,6 +283,12 @@
 
   // ---- formatting: the server sends raw values, the client decides presentation ----
 
+  function formatBytes(v) {
+    if (v >= 1073741824) { return (v / 1073741824).toFixed(1) + ' GB'; }
+    if (v >= 1048576) { return Math.round(v / 1048576) + ' MB'; }
+    return Math.round(v / 1024) + ' KB';
+  }
+
   function formatValue(v, unit) {
     if (unit === '%' || unit === '°C') { return Math.round(v) + (unit === '%' ? ' %' : '°C'); }
     if (unit === 'B/s') {
@@ -183,6 +305,37 @@
     return s < 60 ? s + ' s' : Math.round(s / 60) + ' min';
   }
 
+  // ---- pager: swipe between panels ----
+
+  var pager = $('pager');
+  var tabBtns = Array.prototype.slice.call(document.querySelectorAll('#tabs button'));
+  var rafPending = false;
+
+  function currentPage() { return Math.round(pager.scrollLeft / pager.clientWidth); }
+  function markTab(i) {
+    tabBtns.forEach(function (b, n) { b.className = n === i ? 'on' : ''; });
+  }
+  function goTo(i, smooth) {
+    pager.scrollTo({ left: i * pager.clientWidth, behavior: smooth ? 'smooth' : 'auto' });
+  }
+  pager.addEventListener('scroll', function () {
+    if (rafPending) { return; }
+    rafPending = true;
+    requestAnimationFrame(function () {
+      rafPending = false;
+      var i = currentPage();
+      markTab(i);
+      try { localStorage.setItem(PAGE_KEY, String(i)); } catch (e) { /* not essential */ }
+    });
+  });
+  tabBtns.forEach(function (b, i) { b.addEventListener('click', function () { goTo(i, true); }); });
+  window.addEventListener('resize', function () { goTo(currentPage(), false); });
+  (function restorePage() {
+    var n = 0;
+    try { n = parseInt(localStorage.getItem(PAGE_KEY), 10) || 0; } catch (e) { n = 0; }
+    if (n > 0 && n < tabBtns.length) { goTo(n, false); markTab(n); }
+  })();
+
   // ---- sensors ----
 
   function buildTiles(items) {
@@ -191,10 +344,9 @@
     tiles = {};
     items.forEach(function (it) {
       var t = el('div', 'tile');
-      var label = el('div', 'label', it.label);
       var value = el('div', 'value', '—');
       var sub = el('div', 'sub');
-      t.appendChild(label); t.appendChild(value); t.appendChild(sub);
+      t.appendChild(el('div', 'label', it.label)); t.appendChild(value); t.appendChild(sub);
       grid.appendChild(t);
       tiles[it.id] = { el: t, value: value, sub: sub };
     });
@@ -215,13 +367,58 @@
     });
   }
 
+  // ---- top apps ----
+
+  function appRow(it, valueText, pct, barClass) {
+    var row = el('div', 'app');
+    var line = el('div', 'row');
+    var name = it.label.replace(/\.exe$/i, '') + (it.count > 1 ? ' ×' + it.count : '');
+    line.appendChild(el('span', 'nm', name));
+    line.appendChild(el('span', 'val', valueText));
+    var bar = el('div', 'bar ' + barClass);
+    var fill = document.createElement('i');
+    fill.style.width = Math.max(1, Math.min(100, pct)) + '%';
+    bar.appendChild(fill);
+    row.appendChild(line); row.appendChild(bar);
+    return row;
+  }
+
+  function fillApps(box, rows, emptyText) {
+    box.textContent = '';
+    if (!rows.length) { box.appendChild(el('div', 'quiet', emptyText)); return; }
+    rows.forEach(function (r) { box.appendChild(r); });
+  }
+
+  function renderProcesses(data) {
+    $('apps').className = data.state === 'ok' ? '' : data.state;
+    var items = data.items || [];
+    if (data.state !== 'ok' && !items.length) {
+      var why = STATE_TEXT[data.state] || data.state;
+      fillApps($('appsCpu'), [], why); fillApps($('appsMem'), [], why);
+      return;
+    }
+    var total = data.memTotal || 0;
+    var cpuRows = items.filter(function (it) { return it.cpu >= THRESHOLD; })
+      .sort(function (a, b) { return b.cpu - a.cpu; }).slice(0, topShown)
+      .map(function (it) { return appRow(it, it.cpu.toFixed(1) + ' %', it.cpu, 'cpu'); });
+    var memRows = total > 0 ? items.filter(function (it) { return it.mem / total * 100 >= THRESHOLD; })
+      .sort(function (a, b) { return b.mem - a.mem; }).slice(0, topShown)
+      .map(function (it) { var pct = it.mem / total * 100; return appRow(it, formatBytes(it.mem) + ' · ' + Math.round(pct) + ' %', pct, 'mem'); }) : [];
+    fillApps($('appsCpu'), cpuRows, 'Ninguna pasa del ' + THRESHOLD + ' %');
+    fillApps($('appsMem'), memRows, 'Ninguna pasa del ' + THRESHOLD + ' %');
+  }
+
   // ---- CI ----
 
   function renderCI(data) {
     var box = $('ci');
     box.textContent = '';
     if (!data.items.length) {
-      box.appendChild(el('div', 'empty', 'Sin pipelines configurados'));
+      var wait = el('div');
+      wait.id = 'ciWait';
+      wait.appendChild(el('b', '', 'En espera'));
+      wait.appendChild(el('span', '', 'Aún no hay pipelines configurados'));
+      box.appendChild(wait);
       return;
     }
     data.items.forEach(function (it) {
@@ -253,33 +450,57 @@
     toast.timer = setTimeout(function () { t.className = ''; }, 4000);
   }
 
+  function allUIs() {
+    return Object.keys(buttons).map(function (id) { return buttons[id]; }).concat(dockUIs);
+  }
+
+  function refreshUI(ui) { ui.el.disabled = !ui.tokenOk || ui.busy || ui.off; }
+
   function updateButtonsEnabled() {
     var has = getToken() !== '';
-    Object.keys(buttons).forEach(function (id) {
-      buttons[id].el.disabled = !has;
-      buttons[id].el.title = has ? '' : 'Introduce el token en ajustes';
+    allUIs().forEach(function (ui) {
+      ui.tokenOk = has;
+      ui.el.title = has ? '' : 'Introduce el token en ajustes';
+      refreshUI(ui);
     });
   }
 
-  function disarm(id) {
-    var b = buttons[id];
-    if (!b) { return; }
-    clearTimeout(b.timer);
-    b.timer = null;
-    b.el.classList.remove('armed');
-    b.name.textContent = ACTION_NAMES[id] || id;
+  // The confirmation is a UI affair (CLAUDE.md rule 9): the protocol carries only the id.
+  // A confirm_required entry also covers the ids of its family: "container.stop" covers
+  // container.stop.<id>, "project.stop" covers project.stop.<name>.
+  function needsConfirm(id) {
+    return confirmRequired.indexOf(id) >= 0 ||
+      confirmRequired.indexOf(id.replace(/\.[^.]+$/, '')) >= 0;
   }
 
-  function onAction(id) {
-    var b = buttons[id];
-    if (confirmRequired.indexOf(id) >= 0 && !b.timer) {   // first tap of a destructive action
-      b.el.classList.add('armed');
-      b.name.textContent = '¿Confirmar?';
-      b.timer = setTimeout(function () { disarm(id); }, CONFIRM_MS);
+  function disarm(id) {
+    var a = armTimers[id];
+    if (!a) { return; }
+    clearTimeout(a.timer);
+    delete armTimers[id];
+    a.ui.el.classList.remove('armed');
+    a.ui.name.textContent = a.ui.label();
+  }
+
+  function onTap(id, ui) {
+    if (needsConfirm(id) && !armTimers[id]) {   // first tap of a destructive action
+      ui.el.classList.add('armed');
+      ui.name.textContent = '¿Confirmar?';
+      armTimers[id] = { ui: ui, timer: setTimeout(function () { disarm(id); }, CONFIRM_MS) };
       return;
     }
     disarm(id);
     send(id);
+  }
+
+  // The docker list is rebuilt on every event; a rebuilt button takes over a pending
+  // confirmation of the same action so the second tap still lands.
+  function adoptArm(id, ui) {
+    var a = armTimers[id];
+    if (!a) { return; }
+    a.ui = ui;
+    ui.el.classList.add('armed');
+    ui.name.textContent = '¿Confirmar?';
   }
 
   function send(id) {
@@ -293,7 +514,7 @@
       if (res.status === 202) { return; }
       var msgs = {
         401: 'Token inválido',
-        404: 'Acción desconocida',
+        404: 'Acción desconocida o el contenedor ya no existe',
         409: 'Ya se está ejecutando',
         429: 'Espera ' + Math.ceil((res.body.retryAfterMs || 2000) / 1000) + ' s'
       };
@@ -301,36 +522,196 @@
     }).catch(function () { toast('Sin conexión con el PC'); });
   }
 
+  function makeUI(labelFn) {
+    var b = el('button', 'act');
+    b.type = 'button';
+    var name = el('span', 'name', labelFn());
+    var st = el('span', 'st');
+    b.appendChild(name); b.appendChild(st);
+    return { el: b, name: name, st: st, label: labelFn, busy: false, off: false, tokenOk: getToken() !== '' };
+  }
+
   function buildButtons(ids) {
-    var box = $('actions');
-    box.textContent = '';
+    ['ctrl', 'dockerActs', 'vmActs'].forEach(function (id) { $(id).textContent = ''; });
     buttons = {};
-    ids.forEach(function (id) {
-      var b = el('button', 'act');
-      b.type = 'button';
-      var name = el('span', 'name', ACTION_NAMES[id] || id);
-      var st = el('span', 'st');
-      b.appendChild(name); b.appendChild(st);
-      b.addEventListener('click', function () { onAction(id); });
-      box.appendChild(b);
-      buttons[id] = { el: b, name: name, st: st, timer: null };
+    var ORDER = ['media.playpause', 'media.next', 'vm.start', 'vm.suspend', 'docker.start', 'docker.stop'];
+    ids.slice().sort(function (a, b) { return ORDER.indexOf(a) - ORDER.indexOf(b); }).forEach(function (id) {
+      var ui = makeUI(function () { return ACTION_NAMES[id] || id; });
+      ui.el.addEventListener('click', function () { onTap(id, ui); });
+      $(PLACE[id] || 'ctrl').appendChild(ui.el);
+      buttons[id] = ui;
     });
     updateButtonsEnabled();
   }
 
+  // Shows the state of one action on its button and locks it while it runs.
+  function showAction(ui, s) {
+    ui.el.classList.remove('running', 'ok', 'failed', 'timeout');
+    ui.st.textContent = '';
+    ui.busy = !!s && s.state === 'running';
+    if (s) {
+      ui.el.classList.add(s.state);
+      ui.st.textContent = ACTION_STATE_TEXT[s.state] + (s.message && s.state !== 'ok' ? ' ' + s.message : '');
+    }
+    refreshUI(ui);
+  }
+
   function renderActions(data) {
-    data.items.forEach(function (it) { actionStates[it.id] = it; });
-    Object.keys(buttons).forEach(function (id) {
-      var s = actionStates[id];
-      var b = buttons[id];
-      b.el.classList.remove('running', 'ok', 'failed', 'timeout');
-      b.st.textContent = '';
-      // Items disappear from the event 60 s after finishing: forget them then.
-      var present = data.items.some(function (i) { return i.id === id; });
-      if (!s || !present) { delete actionStates[id]; return; }
-      b.el.classList.add(s.state);
-      b.st.textContent = ACTION_STATE_TEXT[s.state] + (s.message && s.state !== 'ok' ? ' ' + s.message : '');
+    liveActions = {};
+    data.items.forEach(function (it) { liveActions[it.id] = it; });   // finished items drop out after 60 s
+    Object.keys(buttons).forEach(function (id) { showAction(buttons[id], liveActions[id]); });
+    if (lastDocker) { renderDocker(lastDocker); }
+  }
+
+  // ---- docker ----
+  // Containers of one compose project are shown as a single parent card (like Docker
+  // Desktop); "Ver" unfolds its children. The list is rebuilt on every event: it is small.
+
+  function isRunning(c) { return c.state === 'running'; }
+
+  function containerAction(cid) {
+    return liveActions['container.stop.' + cid] || liveActions['container.start.' + cid];
+  }
+
+  function stat(parent, text, title) {
+    var d = el('div', '', text);
+    if (title) { d.title = title; }
+    parent.appendChild(d);
+  }
+
+  // Inside a project card the "<project>-" prefix of a container name is noise.
+  function shortName(c) {
+    var p = c.project + '-';
+    return c.project && c.name.indexOf(p) === 0 && c.name.length > p.length ? c.name.slice(p.length) : c.name;
+  }
+
+  function containerCard(c, child) {
+    var running = isRunning(c);
+    var root = el('div', 'ctr ' + c.state + (child ? ' child' : ''));
+    var top = el('div', 'top');
+    top.appendChild(el('span', 'name', child ? shortName(c) : c.name));
+    top.appendChild(el('span', 'badge', c.status || c.state));
+    root.appendChild(top);
+    root.appendChild(el('div', 'sub', c.image));
+    var m = el('div', 'meters');
+    if (running && c.cpu !== null) {
+      stat(m, 'CPU ' + c.cpu.toFixed(1) + ' %');
+      if (c.mem !== null) { stat(m, 'RAM ' + formatBytes(c.mem) + (c.memLimit ? ' / ' + formatBytes(c.memLimit) : '')); }
+      if (c.pids !== null) { stat(m, 'PIDs ' + c.pids); }
+    }
+    if (c.ports) { stat(m, c.ports, c.ports); }
+    root.appendChild(m);
+
+    var id = (running ? 'container.stop.' : 'container.start.') + c.id;
+    var ui = makeUI(function () { return running ? '■ Apagar' : '▶ Encender'; });
+    ui.el.addEventListener('click', function () { onTap(id, ui); });
+    adoptArm(id, ui);
+    showAction(ui, containerAction(c.id));
+    root.appendChild(ui.el);
+    dockUIs.push(ui);
+    return root;
+  }
+
+  function groupButton(id, text, off) {
+    var ui = makeUI(function () { return text; });
+    ui.off = off;
+    ui.el.addEventListener('click', function () { onTap(id, ui); });
+    adoptArm(id, ui);
+    showAction(ui, liveActions[id]);
+    dockUIs.push(ui);
+    return ui.el;
+  }
+
+  function sortContainers(list) {
+    return list.slice().sort(function (a, b) {
+      return (isRunning(b) ? 1 : 0) - (isRunning(a) ? 1 : 0) || a.name.localeCompare(b.name);
     });
+  }
+
+  function groupCard(name, members) {
+    var open = !!expanded[name];
+    var run = members.filter(isRunning);
+    var cpu = 0, mem = 0, haveStats = false;
+    run.forEach(function (c) {
+      if (c.cpu !== null) { cpu += c.cpu; haveStats = true; }
+      if (c.mem !== null) { mem += c.mem; }
+    });
+    var root = el('div', 'ctr group ' + (run.length ? 'running' : 'exited') + (open ? ' wide' : ''));
+    var top = el('div', 'top');
+    top.appendChild(el('span', 'name', name));
+    top.appendChild(el('span', 'badge', run.length + '/' + members.length + ' en ejecución'));
+    root.appendChild(top);
+    root.appendChild(el('div', 'sub', members.length + (members.length === 1 ? ' contenedor' : ' contenedores')));
+    var m = el('div', 'meters');
+    if (haveStats) { stat(m, 'CPU ' + cpu.toFixed(1) + ' %'); stat(m, 'RAM ' + formatBytes(mem)); }
+    root.appendChild(m);
+
+    var row = el('div', 'grow');
+    row.appendChild(groupButton('project.start.' + name, '▶ Encender', run.length === members.length));
+    row.appendChild(groupButton('project.stop.' + name, '■ Apagar', run.length === 0));
+    var tog = el('button', 'act toggle', open ? 'Ocultar ▴' : 'Ver ▾');
+    tog.type = 'button';
+    tog.addEventListener('click', function () { expanded[name] = !open; renderDocker(lastDocker); });
+    row.appendChild(tog);
+    root.appendChild(row);
+
+    if (open) {
+      var kids = el('div', 'children');
+      sortContainers(members).forEach(function (c) { kids.appendChild(containerCard(c, true)); });
+      root.appendChild(kids);
+    }
+    return root;
+  }
+
+  var pressing = false;        // a pointer is down on the docker list
+  var repaintTimer = null;
+
+  $('containers').addEventListener('pointerdown', function () { pressing = true; });
+  ['pointerup', 'pointercancel'].forEach(function (ev) {
+    document.addEventListener(ev, function () {
+      if (!pressing) { return; }
+      pressing = false;
+      // Wait out the click that follows pointerup before rebuilding the buttons.
+      clearTimeout(repaintTimer);
+      repaintTimer = setTimeout(function () { if (lastDocker) { renderDocker(lastDocker); } }, 400);
+    });
+  });
+
+  function renderDocker(data) {
+    lastDocker = data;
+    if (pressing) { return; }   // repainted on release with the latest data
+    var engine = $('engine');
+    engine.className = data.state === 'ok' && data.engine ? 'up' : '';
+    if (data.state === 'ok') { engine.textContent = data.engine ? 'En ejecución' : 'Detenido'; }
+    else { engine.textContent = STATE_TEXT[data.state] || data.state; }
+
+    var box = $('containers');
+    box.className = data.state === 'ok' ? '' : data.state;
+    box.textContent = '';
+    dockUIs = [];
+    if (!data.items.length) {
+      var msg = !data.engine && data.state === 'ok' ? 'Docker está detenido. Enciéndelo para ver los contenedores.'
+              : data.state === 'ok' ? 'No hay contenedores.' : 'Sin datos de Docker.';
+      box.appendChild(el('div', 'empty', msg));
+      return;
+    }
+
+    var byProject = {}, entries = [];
+    data.items.forEach(function (c) {
+      if (!c.project) { entries.push({ name: c.name, list: [c], single: true }); return; }
+      if (!byProject[c.project]) {
+        byProject[c.project] = { name: c.project, list: [], single: false };
+        entries.push(byProject[c.project]);
+      }
+      byProject[c.project].list.push(c);
+    });
+    entries.sort(function (a, b) {
+      return (b.list.some(isRunning) ? 1 : 0) - (a.list.some(isRunning) ? 1 : 0) || a.name.localeCompare(b.name);
+    });
+    entries.forEach(function (e) {
+      box.appendChild(e.single ? containerCard(e.list[0], false) : groupCard(e.name, e.list));
+    });
+    updateButtonsEnabled();
   }
 
   // ---- connection ----
@@ -360,9 +741,17 @@
     es.onerror = function () { connected = false; refreshStatus(); };
     listen(es, 'hello', function (h) {
       confirmRequired = h.confirmRequired || [];
+      dockerEnabled = (h.dynamicActions || []).length > 0;
+      topShown = h.processesTopN || 5;
       buildButtons(h.actions || []);
+      if (!dockerEnabled) {
+        $('containers').textContent = '';
+        $('containers').appendChild(el('div', 'empty', 'Docker está deshabilitado en la configuración.'));
+      }
     });
     listen(es, 'sensors', renderSensors);
+    listen(es, 'processes', renderProcesses);
+    listen(es, 'docker', renderDocker);
     listen(es, 'ci', renderCI);
     listen(es, 'actions', renderActions);
   }

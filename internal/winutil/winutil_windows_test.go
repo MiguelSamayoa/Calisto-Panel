@@ -35,3 +35,35 @@ func TestRun(t *testing.T) {
 		t.Error("Run with empty argv succeeded")
 	}
 }
+
+func TestOutput(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	out, err := Output(ctx, []string{os.Args[0], "-test.list=TestOutput"})
+	if err != nil || len(out) == 0 {
+		t.Errorf("Output(self) = %q, %v; want the listed test name", out, err)
+	}
+}
+
+func TestProcessesSeesSelf(t *testing.T) {
+	ps, err := Processes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range ps {
+		if p.PID == uint32(os.Getpid()) {
+			if p.Path == "" || p.Private == 0 {
+				t.Errorf("own process incomplete: %+v", p)
+			}
+			return
+		}
+	}
+	t.Error("own pid not in snapshot")
+}
+
+func TestTotalMemory(t *testing.T) {
+	got, err := TotalMemory()
+	if err != nil || got < 1<<30 {
+		t.Errorf("TotalMemory = %d, %v; want at least 1 GiB", got, err)
+	}
+}

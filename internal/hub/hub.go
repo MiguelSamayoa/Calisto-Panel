@@ -1,11 +1,12 @@
-// Package hub keeps the in-memory state of the three data domains (sensors, ci,
-// actions) and fans it out to SSE subscribers. Domains are independent: updating one
+// Package hub keeps the in-memory state of the data domains (sensors, ci, actions,
+// processes, docker) and fans it out to SSE subscribers. Domains are independent: updating one
 // never touches another. stale/dead are computed when emitting, never stored.
 package hub
 
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -55,6 +56,14 @@ type Hub struct {
 	ci        []*ciEntry
 	ciIdx     map[string]*ciEntry
 	actions   []*actionEntry
+
+	procs        domain
+	procItems    []ProcessUpdate
+	procMemTotal float64
+	dock         domain
+	dockItems    []Container
+	dockEngine   bool
+	dockerOn     bool
 }
 
 type sensorEntry struct {
@@ -115,6 +124,7 @@ func New(cfg *config.Config, actionIDs []string) (*Hub, error) {
 		keepalive: time.Duration(cfg.Server.SSEKeepaliveMs) * time.Millisecond,
 		sensorIdx: map[string]*sensorEntry{},
 		ciIdx:     map[string]*ciEntry{},
+		dockerOn:  cfg.Actions.Docker.Enabled,
 	}
 	stale := time.Duration(cfg.Server.StaleMs) * time.Millisecond
 	dead := time.Duration(cfg.Server.DeadMs) * time.Millisecond
@@ -141,14 +151,29 @@ func New(cfg *config.Config, actionIDs []string) (*Hub, error) {
 	if confirm == nil {
 		confirm = []string{}
 	}
+	dynamic := []string{}
+	if cfg.Actions.Docker.Enabled {
+		dynamic = []string{"container.start", "container.stop", "project.start", "project.stop"}
+		// The destructive dynamic actions always ask for a second tap, whatever the
+		// config says: the client cannot know their ids in advance.
+		confirm = slices.Clone(confirm)
+		for _, id := range []string{"container.stop", "project.stop"} {
+			if !slices.Contains(confirm, id) {
+				confirm = append(confirm, id)
+			}
+		}
+	}
 	hello, err := json.Marshal(map[string]any{
-		"server":            serverName,
-		"sensorsIntervalMs": cfg.Sensors.IntervalMs,
-		"ciIntervalMs":      cfg.CI.IntervalMs,
-		"staleMs":           cfg.Server.StaleMs,
-		"deadMs":            cfg.Server.DeadMs,
-		"actions":           actionIDs,
-		"confirmRequired":   confirm,
+		"server":              serverName,
+		"sensorsIntervalMs":   cfg.Sensors.IntervalMs,
+		"ciIntervalMs":        cfg.CI.IntervalMs,
+		"staleMs":             cfg.Server.StaleMs,
+		"deadMs":              cfg.Server.DeadMs,
+		"actions":             actionIDs,
+		"dynamicActions":      dynamic,
+		"processesIntervalMs": cfg.Processes.IntervalMs,
+		"processesTopN":       cfg.Processes.TopN,
+		"confirmRequired":     confirm,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("encoding hello: %w", err)

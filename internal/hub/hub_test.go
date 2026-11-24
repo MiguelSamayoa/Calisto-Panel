@@ -209,8 +209,8 @@ func TestServeStream(t *testing.T) {
 		t.Fatalf("first line = %q, want retry: 3000", sc.Text())
 	}
 
-	// hello, then a snapshot of sensors and ci (no actions yet).
-	for _, want := range []string{"hello", "sensors", "ci"} {
+	// hello, then a snapshot of every domain that has data (no actions yet; docker is off).
+	for _, want := range []string{"hello", "sensors", "ci", "processes"} {
 		if ev, _ := readEvent(t, sc); ev != want {
 			t.Fatalf("event = %s, want %s", ev, want)
 		}

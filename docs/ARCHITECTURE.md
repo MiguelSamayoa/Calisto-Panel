@@ -13,7 +13,8 @@ diarias están en `CLAUDE.md`.
 | LibreHardwareMonitor | externo | **administrador** | leer sensores; expone `127.0.0.1:8085/data.json` |
 | Azure DevOps REST API | remoto | PAT con Build (Read) | último resultado por pipeline |
 | `panel.exe` | propio | usuario normal | sondear, mantener estado, servir SSE, ejecutar acciones |
-| Docker Desktop CLI | externo | usuario normal | `docker desktop start|stop|status` |
+| Docker Desktop CLI | externo | usuario normal | `docker desktop start|stop|status`; `docker ps -a`, `docker stats --no-stream`, `docker start|stop <id>` |
+| API de procesos de Windows | API | usuario normal | CPU y memoria por proceso (`internal/winutil`) |
 | `vmrun.exe` | externo | usuario normal | `start nogui`, `suspend soft` |
 | Windows SendInput | API | usuario normal, sesión interactiva | teclas de medios |
 | Fully Kiosk Browser | Android | — | renderizar y disparar acciones |
@@ -68,7 +69,15 @@ Reglas del store:
 |---|---|---|---|
 | LHM | 5 s | 2 s | log en nivel `warn`, reintento al siguiente tick; sin backoff (es local y barato) |
 | Azure DevOps | 60 s o 150 s | 10 s | backoff exponencial hasta 5 min; se restablece al primer éxito |
+| Procesos | 5 s | — | se conserva la última lista y el dominio pasa a `error`; sin backoff (es local) |
+| Docker | 5 s | 8 s | `docker ps` fallido = motor apagado (`engine:false`, no es un error); sin backoff |
 | Acción | — | 60 s | se marca `failed` con el mensaje de error |
+
+`processes` y `docker` son dominios de **lista dinámica**: cada sondeo reemplaza la lista
+completa y la salud (`state`, `ageMs`) es del dominio, no de cada ítem. Usan los umbrales
+`stale_ms`/`dead_ms` de los sensores. El primer sondeo de `processes` solo toma la línea
+base de CPU (un porcentaje necesita dos muestras) y no emite; hasta el segundo, el dominio
+es `unavailable`. `docker` solo existe si `actions.docker.enabled` es `true`.
 
 ---
 
@@ -90,11 +99,16 @@ Fully Kiosk cortan conexiones ociosas; sin esto el panel se congela en silencio.
 
 ```
 event: hello
-data: {"server":"calisto-panel/0.1.0","sensorsIntervalMs":5000,"ciIntervalMs":60000,"staleMs":10000,"deadMs":60000,"actions":["docker.start","docker.stop","vm.suspend","vm.start","media.playpause","media.next"],"confirmRequired":["docker.stop","vm.suspend"]}
+data: {"server":"calisto-panel/0.1.0","sensorsIntervalMs":5000,"ciIntervalMs":60000,"staleMs":10000,"deadMs":60000,"actions":["docker.start","docker.stop","vm.suspend","vm.start","media.playpause","media.next"],"dynamicActions":["container.start","container.stop","project.start","project.stop"],"processesIntervalMs":5000,"processesTopN":5,"confirmRequired":["docker.stop","vm.suspend","container.stop","project.stop"]}
 ```
 
 El cliente construye los botones y las reglas de confirmación a partir de este evento.
-No codifica la lista de acciones en el HTML.
+No codifica la lista de acciones en el HTML. `dynamicActions` son familias de acciones
+cuyo ID lleva un sufijo (ver §4); está vacío si Docker está deshabilitado. Una entrada de
+`confirmRequired` cubre también sus IDs con sufijo: `container.stop` exige doble toque en
+`container.stop.<id>`. Con Docker habilitado, el hub añade siempre `container.stop` y
+`project.stop` a `confirmRequired` aunque `config.yaml` no los liste: el cliente no puede
+conocer esos IDs de antemano y la confirmación no debe depender de acordarse de ponerlos.
 
 ### Evento `sensors`
 
@@ -113,6 +127,54 @@ data: {"ts":"2026-11-23T08:14:05-06:00","items":[
 - `ageMs` aparece solo cuando `state` es `stale` o `dead`.
 - Un ítem `unavailable` conserva su `id` y `label` para que el tile no desaparezca del
   layout. Un tile que se esfuma es peor que uno que dice que no sabe.
+
+### Evento `processes`
+
+```
+event: processes
+data: {"ts":"2026-11-23T08:14:05-06:00","state":"ok","memTotal":25553551360,"items":[
+  {"id":"chrome.exe","label":"chrome.exe","cpu":2.5,"mem":2021441536,"count":22},
+  {"id":"code.exe","label":"Code.exe","cpu":1.5,"mem":1794179072,"count":13}
+]}
+```
+
+- Un ítem es una **app**: todos los procesos de un mismo ejecutable, sumados.
+- `cpu` es el porcentaje de la capacidad total (todos los procesadores lógicos) usado
+  desde el sondeo anterior. `mem` son bytes de memoria privada (`PrivateUsage`), que no
+  cuenta dos veces las páginas compartidas entre los muchos procesos de un navegador.
+  Ambos son crudos; el cliente formatea.
+- Es app todo ejecutable cuya ruta **no** está bajo `%SystemRoot%`. `processes.exclude`
+  oculta nombres concretos; `processes.include_unreadable` admite procesos cuya ruta
+  Windows no deja leer sin elevación (`vmmem`/`vmmemWSL`, donde vive el consumo de Docker
+  con WSL2). Un proceso ilegible que no esté en esa lista se descarta.
+- El servidor envía la unión del top `top_n` por CPU y el top `top_n` por memoria,
+  ordenada por CPU; el cliente arma las dos columnas.
+- `memTotal` son los bytes de memoria física instalada, para que el cliente calcule la
+  cuota de cada app. El umbral de presentación (solo apps con más del 10 % de CPU o de
+  RAM) es del cliente: el servidor no filtra por él.
+- `state` es del dominio. Con `error` la lista es la última buena.
+
+### Evento `docker`
+
+```
+event: docker
+data: {"ts":"...","state":"ok","engine":true,"items":[
+  {"id":"aaaaaaaaaaaa","project":"forms-dev","name":"forms-dev-web-1","image":"nginx:1.27","status":"Up 3 hours","state":"running","ports":"0.0.0.0:8080->80/tcp","cpu":1.25,"mem":11010048,"memLimit":8160437862.4,"pids":4},
+  {"id":"cccccccccccc","project":"","name":"old-worker","image":"redis:7","status":"Exited (0) 5 days ago","state":"exited","ports":"","cpu":null,"mem":null,"memLimit":null,"pids":null}
+]}
+```
+
+- `engine:false` significa que `docker ps` no pudo hablar con el motor (Docker Desktop
+  apagado); `items` va vacío. Es un estado normal, no un fallo: `state` sigue siendo `ok`.
+- `project` es el proyecto de Docker Compose (etiqueta `com.docker.compose.project`), o
+  `""` si el contenedor es suelto. Un nombre que no tenga forma de proyecto válido
+  (`[a-z0-9][a-z0-9_-]*`) se trata como suelto. El cliente agrupa por él y muestra solo el
+  padre; los hijos se despliegan a demanda.
+- `id` es el ID corto de 12 dígitos hexadecimales. Es lo que el cliente devuelve en
+  `container.start.<id>` / `container.stop.<id>`. Una fila con otro formato se descarta.
+- `status` es el texto de Docker, sin tocar. `state` es `running | exited | paused | ...`.
+- `cpu`, `mem`, `memLimit` y `pids` son `null` en contenedores detenidos o si
+  `docker stats` falló en esa ronda. `cpu` es un porcentaje; `mem` y `memLimit`, bytes.
 
 ### Evento `ci`
 
@@ -158,7 +220,8 @@ POST /api/do/{actionId}
 Authorization: Bearer <api_token>
 ```
 
-Sin cuerpo. El `actionId` debe pertenecer a la lista blanca.
+Sin cuerpo. El `actionId` debe pertenecer a la lista blanca o a una de sus dos familias
+con sufijo (ver "Acciones por contenedor" y "Acciones por proyecto" más abajo).
 
 Orden de validación, fijo: **401 → 404 → 409 → 429**. La autenticación va primero para que
 un cliente sin token no pueda sondear qué IDs existen. El `409` va antes que el `429` para
@@ -204,7 +267,47 @@ El `actionId` se resuelve contra `config.yaml` y produce un `argv` fijo:
 | `media.playpause` | `SendInput` con `VK_MEDIA_PLAY_PAUSE` (`0xB3`) |
 | `media.next` | `SendInput` con `VK_MEDIA_NEXT_TRACK` (`0xB0`) |
 
-Ningún valor del cliente entra en el `argv`. El cliente solo elige una fila de esa tabla.
+Ningún valor del cliente entra en el `argv`. El cliente solo elige una fila de esa tabla
+(salvo las dos familias de contenedor, que siguen).
+
+### Acciones por contenedor
+
+| actionId | argv resultante |
+|---|---|
+| `container.start.<id>` | `docker start <id>` |
+| `container.stop.<id>` | `docker stop <id>` |
+
+Es la única excepción a "lista cerrada de IDs", y está acotada así:
+
+1. El verbo es uno de dos literales; cualquier otro (`restart`, `rm`, `exec`…) es `404`.
+2. `<id>` debe ser exactamente 12 dígitos hexadecimales en minúscula. Por construcción no
+   puede empezar por `-`, contener espacios ni parecer una opción.
+3. `<id>` debe estar en la lista que **el servidor mismo** obtuvo en su último sondeo
+   exitoso de `docker ps` (`hub.HasContainer`). El cliente nunca nombra un objetivo que el
+   servidor no haya observado: un ID bien formado pero desconocido, o cualquiera mientras
+   el motor está apagado, responde `404 unknown_action`.
+4. El `argv` se arma en `internal/actions`; el ID validado es su único elemento variable.
+5. Solo existe con `actions.docker.enabled: true`.
+
+### Acciones por proyecto
+
+| actionId | argv resultante |
+|---|---|
+| `project.start.<nombre>` | `docker start <id1> <id2> …` |
+| `project.stop.<nombre>` | `docker stop <id1> <id2> …` |
+
+`<nombre>` solo se usa como **clave de búsqueda**: debe cumplir `[a-z0-9][a-z0-9_-]{0,62}`
+y ser un proyecto que el servidor listó en su último sondeo (`hub.ProjectContainers`).
+Los `<id>` del `argv` son los que **el servidor mismo** obtuvo y validó (12 hex) para ese
+proyecto; el cliente no aporta ninguno. Con el motor apagado, o con un proyecto
+desconocido, responde `404 unknown_action`. `docker stop` detiene los contenedores uno
+tras otro (hasta 10 s de gracia cada uno): un proyecto con muchos puede acercarse al
+timeout de 60 s, en cuyo caso se reporta `timeout` aunque Docker siga deteniéndolos.
+
+Heredan el resto del contrato: bearer obligatorio, límite global de 1 acción cada 2 s,
+una ejecución concurrente por ID completo (por eso el `409` es por contenedor), timeout
+de 60 s y entrada en el evento `actions` con el ID completo. `container.stop` y
+`project.stop` figuran siempre en `confirmRequired`, así que el cliente exige doble toque.
 
 Las teclas de medios usan `SendInput` de `user32.dll`. `golang.org/x/sys/windows` **no**
 trae un envoltorio de `SendInput`: se declara con
@@ -360,6 +463,10 @@ CI se desactiva: no se lanza el sondeo, el evento `ci` emite `items: []` y
 `azure_devops_pat` no es obligatorio; con al menos un pipeline el PAT sí lo es. Un fallo de validación **sí** aborta el
 arranque: es un error del operador, no una degradación en tiempo de ejecución.
 
+Las secciones `processes` y `containers` son opcionales: sin ellas rigen los valores por
+defecto de `config.example.yaml` (5 s, `top_n: 5`, `include_unreadable: [vmmem, vmmemWSL]`,
+timeout de Docker 8 s). Así una configuración anterior sigue cargando.
+
 Los umbrales `stale_ms`/`dead_ms` y los intervalos del evento `hello` se leen de la
 configuración; el código no define constantes propias para ellos.
 
@@ -393,6 +500,13 @@ Consecuencias aceptadas:
    amenaza es nulo.
 4. El teléfono es un dispositivo sin parches (Android 11 / MIUI 12.5.8) permanentemente
    en la LAN. Se mitiga dedicándolo: sin cuentas, sin navegación.
+5. Cualquiera en la LAN lee por `GET` los nombres de contenedores, imágenes y puertos, y
+   los nombres de las apps que consumen más. Misma lógica que el punto 1.
+6. Con el token se puede encender o apagar cualquier contenedor que Docker liste, no solo
+   los "del panel". Es reversible (`docker start`), pero puede cortar un servicio que
+   alguien use. Por eso `container.stop` exige doble toque. Nombres de contenedor, imagen
+   y puertos son texto controlado por quien crea el contenedor: el cliente los pinta
+   siempre con `textContent`, nunca como HTML.
 
 ---
 
@@ -415,7 +529,7 @@ Consecuencias aceptadas:
 | D-13 | `GET` sin auth, `POST` con bearer token | autenticar todo; sin auth | Requisito explícito: la familia puede ver, no ejecutar. Autenticar la lectura obligaría a introducir el token antes de poder mirar la pantalla |
 | D-14 | Token introducido a mano una vez → `localStorage` | token en la URL de arranque de Fully Kiosk; QR | Un token en query string termina en historial, logs y encabezados `Referer` |
 | D-15 | Sin TLS en la v1 | certificado autofirmado; mTLS | Un autofirmado produce advertencias permanentes en el WebView y no aporta nada frente al modelo de amenaza de §8 |
-| D-16 | Lista blanca cerrada de 6 acciones, argv fijo | endpoint genérico de comandos | Un endpoint que ejecuta lo que le manden es exactamente el agujero que este diseño evita, incluso con token |
+| D-16 | Lista blanca cerrada de 6 acciones, argv fijo (ampliada por D-31 con dos familias de contenedor) | endpoint genérico de comandos | Un endpoint que ejecuta lo que le manden es exactamente el agujero que este diseño evita, incluso con token |
 | D-17 | `vmrun suspend ... soft`, nunca `stop hard` | apagado forzado | Un toque accidental en una pantalla siempre encendida al borde del escritorio no debe destruir trabajo sin guardar |
 | D-18 | Doble confirmación en `docker.stop` y `vm.suspend`, en el cliente | confirmación en el protocolo; sin confirmación | Es una preocupación de interfaz. Un parámetro `confirm` en la API da falsa seguridad: cualquiera con el token lo envía igual |
 | D-19 | Ejecución asíncrona con `exec` id | `POST` síncrono | `docker desktop stop` tarda decenas de segundos; bloquear dejaría el panel aparentemente colgado |
@@ -429,6 +543,8 @@ Consecuencias aceptadas:
 | D-27 | `docker desktop status` con cadena de coincidencia configurable | parseo fijo de la salida | La cadena varía entre versiones de Docker Desktop. Un valor en configuración se corrige sin recompilar |
 | D-28 | Secretos en `secrets.yaml` aparte, con ACL restringida | todo en `config.yaml`; variables de entorno | Permite versionar `config.example.yaml` completo sin riesgo, y acotar permisos al único archivo que los necesita |
 | D-29 | Tres documentos en vez de cinco | README + GUIA_USUARIO + CLAUDE + ARCHITECTURE + DECISIONS | Para ~1.500 líneas de Go, cinco documentos se desincronizan antes de terminar la v1. El registro de decisiones vive aquí como §9, no como archivo huérfano |
+| D-30 | Paneles `processes` y `docker` como dominios SSE propios, de lista dinámica y con salud por dominio | ampliar `sensors`; un snapshot único | Cambian de tamaño en cada sondeo, así que no caben en los ítems fijos de `sensors`; y `docker stats` tarda 1-2 s, no debe frenar los sensores. CPU y RAM por proceso salen de la API de Windows con `golang.org/x/sys/windows` (ya permitida): LHM no los da. Se agrupa por ejecutable porque un navegador son decenas de procesos |
+| D-31 | Acciones por contenedor (`container.*.<id>`) y por proyecto de Compose (`project.*.<nombre>`), validadas contra la lista que el servidor observó | lista cerrada sin contenedores; nombres en el argv; endpoint con el ID libre | El usuario quiere encender y apagar contenedores individuales desde el panel. Esto exige que el cliente envíe un identificador, lo que choca con la regla 3 de `CLAUDE.md`. Se resuelve sin abrir un canal de comandos: verbo de dos literales, ID de exactamente 12 hex (no puede ser una opción), y solo contenedores que el propio servidor listó. Las acciones por proyecto (Docker Desktop muestra los proyectos de Compose como un padre) no ponen el nombre en el `argv`: lo usan para buscar los IDs que el servidor ya conoce. Ver §4 |
 
 ---
 

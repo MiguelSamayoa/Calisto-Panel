@@ -119,3 +119,32 @@ func TestSecretsNeverFormatted(t *testing.T) {
 		t.Errorf("secret leaked: %s", out)
 	}
 }
+
+// A config written before the processes and containers sections existed must still load.
+func TestOptionalSectionsTakeDefaults(t *testing.T) {
+	cfg, err := Load(write(t, noPipelines, tokenOnly, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p := cfg.Processes; p.IntervalMs != 5000 || p.TopN != 5 || len(p.IncludeUnreadable) != 2 {
+		t.Errorf("processes defaults = %+v", p)
+	}
+	if c := cfg.Containers; c.IntervalMs != 5000 || c.TimeoutMs != 8000 {
+		t.Errorf("containers defaults = %+v", c)
+	}
+}
+
+func TestOptionalSectionsOverride(t *testing.T) {
+	cfg, err := Load(write(t, noPipelines, tokenOnly, func(s string) string {
+		return s + "processes: {interval_ms: 2000, top_n: 3, exclude: [panel.exe], include_unreadable: []}\ncontainers: {interval_ms: 10000, timeout_ms: 4000}\n"
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p := cfg.Processes; p.IntervalMs != 2000 || p.TopN != 3 || len(p.Exclude) != 1 || len(p.IncludeUnreadable) != 0 {
+		t.Errorf("processes = %+v", p)
+	}
+	if cfg.Containers.IntervalMs != 10000 || cfg.Containers.TimeoutMs != 4000 {
+		t.Errorf("containers = %+v", cfg.Containers)
+	}
+}

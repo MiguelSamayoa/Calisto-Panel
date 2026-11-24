@@ -384,12 +384,13 @@ Instala Fully Kiosk Browser, activa la licencia PLUS y configura:
 | Start URL | `http://<IP-del-PC>:7171/` | — |
 | Keep Screen On | activado | el panel debe estar visible siempre |
 | Screen Brightness | bajo (20–35 %) | mitiga burn-in y calor |
+| Screen Orientation | horizontal (landscape) | el diseño es para pantalla apaisada |
 | Kiosk Mode (PLUS) | activado, con PIN de salida | evita que alguien salga de la app |
 | Screensaver (PLUS) | activado, de noche, con pantalla en negro | **mitigación principal de burn-in** |
 | Reload on connection restore | activado | recupera solo al volver el Wi-Fi |
 | URL de error (Web Content Settings) | página local de respaldo | ver §5.3; el nombre exacto del ajuste varía según la versión |
 
-Desactiva en el teléfono: rotación automática, bloqueo de pantalla, y actualizaciones
+Desactiva en el teléfono: rotación automática (la orientación horizontal la fija Fully Kiosk), bloqueo de pantalla, y actualizaciones
 automáticas de MIUI.
 
 ### 5.3 Página de respaldo cuando el PC está apagado
@@ -416,6 +417,28 @@ sin sesiones abiertas de nada.
 ---
 
 ## 6. Operación
+
+### 6.0 Los tres paneles
+
+La página tiene tres paneles en horizontal; se pasa de uno a otro **deslizando** hacia los
+lados (o tocando la pestaña de arriba). Recuerda el último panel visto al recargar.
+
+| Panel | Contenido |
+|---|---|
+| Sistema | dos tercios de la pantalla son los sensores; el tercio derecho tiene las apps que pasan del 10 % de CPU o de RAM y los botones de medios |
+| Docker | encender/apagar Docker Desktop; los contenedores de un mismo proyecto de Compose salen como **un solo padre** (encender/apagar todo, CPU y RAM sumadas) y "Ver" despliega sus hijos, cada uno con su botón |
+| Pipelines | los botones de la VM y el estado de los pipelines; "En espera" mientras no haya ninguno configurado |
+
+"Apps" son los ejecutables fuera de `C:\Windows`, sumados por nombre (Chrome son todos sus
+procesos). Para ocultar alguna, agrégala a `processes.exclude` en `config.yaml`
+(p. ej. `"panel.exe"`, `"LibreHardwareMonitor.exe"`); `docker` y WSL2 aparecen como
+`vmmem`/`vmmemWSL`. Las secciones `processes` y `containers` de `config.yaml` son
+opcionales (ver `config.example.yaml`).
+
+Apagar un contenedor o un proyecto pide doble toque siempre, aunque `confirm_required`
+no lo liste. Con Docker, `docker stop` de un proyecto grande puede tardar casi el timeout
+de 60 s (los detiene de uno en uno); el panel marcará `tiempo agotado` aunque Docker
+termine de apagarlos.
 
 ### 6.1 Estados que verás en los tiles
 
