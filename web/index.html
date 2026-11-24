@@ -62,50 +62,107 @@
   h2 { font-size: .7rem; font-weight: 600; color: var(--dim); text-transform: uppercase; letter-spacing: .08em; margin: 0 0 6px; }
   .empty { color: var(--dim); padding: 14px; border: 1px dashed var(--line); border-radius: 10px; text-align: center; }
 
-  /* ---- panel 1: system (left two thirds) and apps + media (right third) ---- */
-  #p0 { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: 12px; overflow: hidden; }
+  /* ---- panel Multimedia (pm) and panel Sistema (p0: apps + network left, charts right) ---- */
+  #p0 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: 12px; overflow: hidden; }
   .col { display: flex; flex-direction: column; gap: 6px; min-height: 0; min-width: 0; }
-  #tiles { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: minmax(0, 1fr); gap: 8px; }
-  .tile:last-child:nth-child(odd) { grid-column: 1 / -1; }   /* a lone last tile takes the full row */
-  .tile { min-height: 0; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 6px 12px; display: flex; flex-direction: column; justify-content: center; }
-  .tile .label { color: var(--dim); font-size: .8rem; }
-  .tile .value { font-size: 2.4rem; font-weight: 600; margin: 0; white-space: nowrap; line-height: 1.1; }
-  .tile .sub { font-size: .7rem; color: var(--dim); min-height: 1em; }
-  .tile.stale .value, .tile.dead .value, .tile.unavailable .value, .tile.auth .value, .tile.error .value { color: var(--dim); }
-  .tile.dead .value { text-decoration: line-through; }
-  .tile.auth .sub, .tile.error .sub { color: var(--bad); }
+  .colhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex: none; }
+  .colhead h2 { margin: 0; }
+  .colhead small { text-transform: none; letter-spacing: 0; font-weight: 400; margin-left: 6px; }
 
-  #apps { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+  #winSel { display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  #winSel button { background: none; border: 0; padding: 3px 12px; font-size: .75rem; color: var(--dim); }
+  #winSel button.on { background: #1b1b1b; color: var(--text); }
+
+  .chartbox { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+  .chart { flex: 1; min-height: 0; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 5px 10px 4px; display: flex; flex-direction: column; gap: 2px; transition: border-color .3s; }
+  .chart.warn { border-color: #6b5420; }
+  .chart.danger { border-color: var(--bad); animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 50% { border-color: #5a1f1d; } }
+  .chead { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; flex: none; font-size: .78rem; }
+  .ctitle { color: var(--dim); text-transform: uppercase; letter-spacing: .06em; font-size: .68rem; }
+  .lg { display: flex; align-items: baseline; gap: 5px; white-space: nowrap; }
+  .sw { width: 9px; height: 9px; border-radius: 50%; align-self: center; flex: none; }
+  .ln { color: var(--dim); }
+  .lv { font-size: 1.1rem; font-weight: 600; }
+  .lv.warn { color: var(--warn); }
+  .lv.danger { color: var(--bad); }
+  .lv.none { color: var(--dim); font-weight: 400; }
+  .lg .al { color: var(--bad); font-size: .9rem; }
+  .cwrap { flex: 1; min-height: 0; position: relative; }
+  .cwrap canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; }
+
+  #apps { flex: 1; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 6px 18px; align-content: start; }
   #apps.stale, #apps.dead, #apps.error, #apps.unavailable { opacity: .45; }
   .applist { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
   .applist h3 { margin: 0; font-size: .7rem; font-weight: 600; color: var(--dim); letter-spacing: .06em; }
   .applist > div { display: flex; flex-direction: column; gap: 7px; }
   .app { min-width: 0; }
+  .app.faint { opacity: .5; }
   .app .row { display: flex; justify-content: space-between; gap: 6px; font-size: .85rem; }
   .app .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .app .val { color: var(--dim); white-space: nowrap; }
+  .app.hot .val { color: var(--bad); font-weight: 600; }
   .bar { height: 4px; background: #1a1a1a; border-radius: 2px; margin-top: 2px; overflow: hidden; }
   .bar > i { display: block; height: 100%; background: var(--run); }
   .bar.mem > i { background: var(--ok); }
+  .app.hot .bar > i { background: var(--bad); }
   .quiet { color: var(--dim); font-size: .8rem; padding: 6px 0; }
 
-  #ctrl { flex: none; display: flex; gap: 8px; }
-  #ctrl .act { min-width: 0; }
-  #ctrl .act { flex: 1; }
+  /* what is playing: a card on top of the media buttons */
+  #pm { display: flex; flex-direction: row; gap: 12px; overflow: hidden; }
+  #pmMain { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
+  #np { flex: 1; min-height: 0; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 18px; display: flex; flex-direction: row; align-items: stretch; gap: 18px; }
+  #npInfo { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 8px; }
+  /* cover: a square; the skeleton (moving shimmer) shows until there is an image */
+  #cover { flex: none; position: relative; aspect-ratio: 1 / 1; min-width: 96px; border-radius: 8px; overflow: hidden; background: #1a1a1a; }
+  #cover.skel { background: linear-gradient(100deg, #161616 30%, #262626 50%, #161616 70%) 0 0 / 200% 100%; animation: shimmer 1.4s linear infinite; }
+  #cover.skel::after { content: '♪'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 2.4rem; color: #333; }
+  #cover img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: none; }
+  #cover:not(.skel) img { display: block; }
+  @keyframes shimmer { to { background-position: -200% 0; } }
+  #np.unavailable #cover.skel, #np.dead #cover.skel, #np.error #cover.skel { animation: none; }
+  #np.stale, #np.dead, #np.error, #np.unavailable { opacity: .45; }
+  #np .head { display: flex; justify-content: space-between; gap: 6px; color: var(--dim); font-size: .8rem; }
+  #np .head .app { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #np .ttl { font-size: 1.5rem; font-weight: 600; line-height: 1.2; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  #np .art { font-size: 1rem; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-height: 1.1em; }
+  #np .prog { height: 6px; background: #1a1a1a; border-radius: 2px; overflow: hidden; }
+  #np .prog > i { display: block; height: 100%; width: 0; background: var(--run); }
+  #np .tm { font-size: .8rem; color: var(--dim); display: flex; justify-content: space-between; min-height: 1em; }
+
+  /* media buttons: low, with the symbol centred both ways */
+  #ctrl { flex: none; display: flex; gap: 6px; }
+  #ctrl .act { flex: 1 1 0; min-width: 0; min-height: 72px; padding: 0; gap: 0; align-items: center; justify-content: center; }
+  #ctrl .act .st { display: none; }
+  #ctrl .act .name { display: block; line-height: 1; font-size: 1.5rem; text-align: center; white-space: nowrap; }
+
+  /* volume: a vertical bar on the left edge, full height; drag or tap to set the level */
+  #vol { flex: none; width: 76px; display: none; flex-direction: column; align-items: center; gap: 8px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 0; }
+  #vol.show { display: flex; }
+  #vol.off { opacity: .45; }
+  #volIcon { font-size: 1.3rem; line-height: 1; }
+  #volVal { font-size: .95rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+  #volTrack { flex: 1; min-height: 0; width: 44px; position: relative; overflow: hidden; border-radius: 22px; background: #262626; touch-action: none; }
+  #volFill { position: absolute; left: 0; right: 0; bottom: 0; height: var(--p, 0%); background: var(--run); }
 
   /* ---- action buttons (shared) ---- */
   .act { background: #151515; border: 1px solid var(--line); border-radius: 10px; min-height: 52px; min-width: 96px; padding: 6px 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; }
-  #ctrl .act { flex: 1 1 96px; }
   .act:disabled { opacity: .35; cursor: default; }
   .act .name { font-weight: 600; }
-  .act .st { font-size: .7rem; color: var(--dim); min-height: 1em; }
+  .act .st { font-size: .7rem; color: var(--dim); min-height: 1em; opacity: 1; transition: opacity 1s ease; }
+  .act .st.fade { opacity: 0; }          /* finished actions fade out instead of lingering */
   .act.armed { border-color: var(--warn); color: var(--warn); }
   .act.running .st { color: var(--run); }
   .act.ok .st { color: var(--ok); }
   .act.failed .st, .act.timeout .st { color: var(--bad); }
 
-  /* ---- panel 2: docker ---- */
+  /* ---- panel 2: docker (list view and detail view) ---- */
   #p1 { display: flex; flex-direction: column; gap: 8px; }
+  #p1.detail { overflow: hidden; }
+  #dockerList { display: flex; flex-direction: column; gap: 8px; }
+  #p1.detail #dockerList { display: none; }
+  #dockerDetail { display: none; flex: 1; min-height: 0; flex-direction: column; gap: 8px; }
+  #p1.detail #dockerDetail { display: flex; }
   #dockerBar { display: flex; align-items: center; gap: 10px; flex: none; }
   #dockerBar h2 { margin: 0; }
   #engine { font-size: .8rem; font-weight: 600; padding: 3px 10px; border-radius: 999px; border: 1px solid currentColor; color: var(--dim); }
@@ -124,14 +181,45 @@
   .ctr .meters { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; font-size: .75rem; min-height: 2.4em; }
   .ctr .meters div { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .ctr .act { min-height: 40px; flex-direction: row; gap: 8px; margin-top: 2px; }
-  .ctr.group.wide { grid-column: 1 / -1; }
-  .ctr .grow { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-  .ctr .grow .act { min-width: 0; padding: 4px 8px; }
-  .ctr .grow .act.toggle { grid-column: 1 / -1; min-height: 32px; color: var(--dim); }
-  .children { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 6px; margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--line); }
-  .ctr.child { background: #0a0a0a; }
+  .ctr .grow { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-top: 2px; }
+  .ctr .grow .act { min-width: 0; min-height: 38px; margin: 0; padding: 4px 2px; font-size: .8rem; }
+  .ctr .grow .act .name { white-space: nowrap; }
+  .ctr .grow .act.open { color: var(--run); }
 
-  /* ---- panel 3: pipelines ---- */
+  #dHead { display: flex; align-items: center; gap: 10px; flex: none; }
+  #dHead h2 { margin: 0; font-size: .95rem; color: var(--text); text-transform: none; letter-spacing: .02em; }
+  #dBack { min-height: 40px; min-width: 0; padding: 4px 14px; flex-direction: row; }
+  #dActs { margin-left: auto; display: flex; gap: 8px; }
+  #dActs .act { min-height: 40px; flex-direction: row; gap: 6px; }
+  #dBody { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(190px, 1fr) minmax(0, 2fr); gap: 10px; }
+  #dList { overflow-y: auto; display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+  #dList .ctr { border-left: 4px solid var(--dim); padding: 6px 8px; }
+  #dList .ctr .meters { min-height: 0; }
+  #dList .ctr .grow .act { min-height: 34px; }
+  #dLogs {
+    min-height: 0; overflow-y: auto; background: #050505; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px;
+    font: .72rem/1.4 ui-monospace, Consolas, Menlo, monospace;
+    -webkit-user-select: text; user-select: text;
+  }
+  .ll { white-space: pre-wrap; word-break: break-word; }
+  .ll .ts { color: #555; margin-right: 6px; }
+  .ll .tag { font-weight: 600; margin-right: 6px; }
+  #dLogs .quiet { padding: 10px; }
+
+  /* ---- panel 3: virtual machine and pipelines ---- */
+  #p2 { display: flex; flex-direction: column; gap: 8px; }
+  #vmCard { flex: none; display: flex; align-items: center; gap: 12px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  #vmCard.stale, #vmCard.dead, #vmCard.error, #vmCard.unavailable { opacity: .45; }
+  #vmInfo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+  #vmTitle { display: flex; align-items: center; gap: 10px; }
+  #vmTitle h2 { margin: 0; }
+  #vmName { font-size: 1.15rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #vmStats { display: flex; gap: 18px; font-size: .85rem; color: var(--dim); flex-wrap: wrap; }
+  #vmStats b { color: var(--text); font-weight: 600; }
+  #vmActs { display: flex; gap: 8px; }
+  #vmActs .act { min-height: 48px; min-width: 120px; }
+  #p2 h2.ciTitle { margin: 4px 0 0; flex: none; }
+  #p2 #ci { flex: 1; min-height: 0; }
   #ci { display: flex; flex-direction: column; gap: 8px; }
   .ci { display: flex; align-items: center; gap: 10px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
   .ci .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -144,13 +232,6 @@
   .chip.queued, .chip.canceled, .chip.none { color: var(--dim); }
   .ci.stale .chip, .ci.dead .chip { color: var(--dim); }
   .ci.dead .name { text-decoration: line-through; }
-  #p2 { display: flex; flex-direction: column; gap: 8px; }
-  #vmBar { display: flex; align-items: center; gap: 10px; flex: none; }
-  #vmBar h2 { margin: 0; }
-  #vmActs { margin-left: auto; display: flex; gap: 8px; }
-  #vmActs .act { min-height: 44px; }
-  #p2 h2.ciTitle { margin: 4px 0 0; flex: none; }
-  #p2 #ci { flex: 1; min-height: 0; }
   #ciWait { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; flex: 1; min-height: 120px; color: var(--dim); text-align: center; }
   #ciWait b { font-size: 1.1rem; color: var(--text); font-weight: 600; }
 
@@ -159,7 +240,11 @@
 
   /* Portrait fallback: the panels are designed for landscape, but stay usable. */
   @media (max-width: 700px) {
-    #p0 { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; }
+    #p0 { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; overflow-y: auto; }
+    #pm { overflow-y: auto; }
+    #vol { min-height: 240px; }
+    #dBody { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+    #vmCard { flex-wrap: wrap; }
     #tabs button { padding: 6px 8px; }
   }
 </style>
@@ -169,7 +254,8 @@
   <span id="dot"></span>
   <h1>CALISTO</h1>
   <nav id="tabs">
-    <button type="button" class="on">Sistema</button>
+    <button type="button" class="on">Multimedia</button>
+    <button type="button">Sistema</button>
     <button type="button">Docker</button>
     <button type="button">Pipelines</button>
   </nav>
@@ -185,33 +271,80 @@
 </form>
 
 <main id="pager">
+  <section class="page" id="pm" aria-label="Multimedia">
+    <div id="vol" class="off">
+      <span id="volVal">—</span>
+      <div id="volTrack" role="slider" aria-label="Volumen" aria-orientation="vertical" aria-valuemin="0" aria-valuemax="100"><div id="volFill"></div></div>
+      <span id="volIcon">🔊</span>
+    </div>
+    <div id="pmMain">
+    <div id="np" class="unavailable">
+      <div id="cover" class="skel"><img id="coverImg" alt=""></div>
+      <div id="npInfo">
+        <div class="head"><span id="npLabel">Reproduciendo</span><span class="app" id="npApp"></span></div>
+        <div class="ttl" id="npTtl">Nada en reproducción</div>
+        <div class="art" id="npArt"></div>
+        <div class="prog"><i id="npFill"></i></div>
+        <div class="tm"><span id="npPos"></span><span id="npDur"></span></div>
+      </div>
+    </div>
+    <div id="ctrl"></div>
+    </div>
+  </section>
+
   <section class="page" id="p0" aria-label="Sistema">
     <div class="col">
-      <h2>Sistema</h2>
-      <div id="tiles"></div>
-    </div>
-    <div class="col">
-      <h2>Apps que más consumen · más del 10 %</h2>
+      <div class="colhead"><h2>Apps que más consumen<small id="appsNote">promedio de 15 s · rojo desde 10 %</small></h2></div>
       <div id="apps">
         <div class="applist"><h3>CPU</h3><div id="appsCpu"></div></div>
         <div class="applist"><h3>RAM</h3><div id="appsMem"></div></div>
       </div>
-      <div id="ctrl"></div>
+      <div id="netBox" class="chartbox"></div>
+    </div>
+    <div class="col">
+      <div class="colhead">
+        <h2>Sistema</h2>
+        <div id="winSel" role="group" aria-label="Ventana de tiempo">
+          <button type="button" data-m="1">1 min</button>
+          <button type="button" data-m="5">5 min</button>
+        </div>
+      </div>
+      <div id="charts" class="chartbox"></div>
     </div>
   </section>
 
   <section class="page" id="p1" aria-label="Docker">
-    <div id="dockerBar">
-      <h2>Docker</h2>
-      <span id="engine">—</span>
-      <div id="dockerActs"></div>
+    <div id="dockerList">
+      <div id="dockerBar">
+        <h2>Docker</h2>
+        <span id="engine">—</span>
+        <div id="dockerActs"></div>
+      </div>
+      <div id="containers"></div>
     </div>
-    <div id="containers"></div>
+    <div id="dockerDetail">
+      <div id="dHead">
+        <button type="button" id="dBack" class="act"><span class="name">← Volver</span></button>
+        <h2 id="dTitle"></h2>
+        <div id="dActs"></div>
+      </div>
+      <div id="dBody">
+        <div id="dList"></div>
+        <div id="dLogs"></div>
+      </div>
+    </div>
   </section>
 
   <section class="page" id="p2" aria-label="Pipelines">
-    <div id="vmBar">
-      <h2>Máquina virtual</h2>
+    <div id="vmCard">
+      <div id="vmInfo">
+        <div id="vmTitle">
+          <h2>Máquina virtual</h2>
+          <span id="vmName">—</span>
+          <span id="vmState" class="chip none">—</span>
+        </div>
+        <div id="vmStats"></div>
+      </div>
       <div id="vmActs"></div>
     </div>
     <h2 class="ciTitle">Pipelines</h2>
@@ -227,19 +360,40 @@
 
   var TOKEN_KEY = 'calistoToken';
   var PAGE_KEY = 'calistoPage';
-  var SILENCE_MS = 20000;      // sensors arrive every 5 s; this long without events = offline
+  var SILENCE_MS = 20000;      // events arrive every 2-5 s; this long without any = the stream is dead
+  var RESTART_MS = 10000;      // while dead, rebuild the stream at most this often
+  var RELOAD_AFTER_MS = 45000; // dead this long: reload the whole page (at most once a minute)
+  var RELOAD_KEY = 'calistoReload';
   var CONFIRM_MS = 3000;       // window for the second tap on a destructive action
+  var LOGS_EVERY_MS = 3000;    // refresh of the open log view
+  var INTENT_GRACE_MS = 8000;  // after a start/stop finished, how long a press may outrank what is observed
+  // Top apps: each list shows the best TOP_SHOWN by a 3-reading average, hides noise below
+  // the floor (but never leaves fewer than MIN_SHOWN rows), and turns red from HOT.
+  var HOT = 10;                // % of total CPU / of total RAM
+  var FLOOR_CPU = 1;           // %
+  var FLOOR_RAM = 2;           // %
+  var MIN_SHOWN = 3;
+  var SMOOTH_N = 3;            // readings averaged (5 s apart)
+  var HIST_KEEP_MS = 6 * 60000;
+  var HIST_KEY = 'calistoHist';
+  var WINDOW_KEY = 'calistoWindow';
+  // A finished action shows its mark, fades after FADE[state][0] ms and is gone after [1].
+  var FADE = { ok: [2500, 3500], failed: [7000, 8000], timeout: [7000, 8000] };
+  var LOG_COLORS = ['#6cb6ff', '#7ee787', '#f2cc60', '#ff9bce', '#c297ff', '#ffa657', '#56d4dd', '#ff7b72'];
 
   var ACTION_NAMES = {
     'docker.start': '▶ Encender',
     'docker.stop': '■ Apagar',
-    'vm.start': 'VM ▶',
-    'vm.suspend': 'VM ⏸',
-    'media.playpause': '⏯',
-    'media.next': '⏭'
+    'vm.start': '▶ Encender',
+    'vm.stop': '■ Apagar',
+    'media.prev': '⏮',
+    'media.seek_back': '−10 s',
+    'media.next': '⏭',
+    'media.seek_fwd': '+10 s'
   };
-  var PLACE = { 'docker.start': 'dockerActs', 'docker.stop': 'dockerActs', 'vm.start': 'vmActs', 'vm.suspend': 'vmActs' };   // everything else: ctrl
-  var THRESHOLD = 10;          // apps below this share (% of CPU, % of RAM) are not listed
+  var PLACE = { 'docker.start': 'dockerActs', 'docker.stop': 'dockerActs', 'vm.start': 'vmActs', 'vm.stop': 'vmActs' };   // everything else: ctrl
+  var ORDER = ['media.prev', 'media.seek_back', 'media.playpause', 'media.seek_fwd', 'media.next',
+               'vm.start', 'vm.stop', 'docker.start', 'docker.stop'];
   var RESULT_TEXT = {
     succeeded: 'OK ✓', partiallySucceeded: 'Parcial !', failed: 'Falló ✗',
     canceled: 'Cancelado', running: 'En curso…', queued: 'En cola'
@@ -249,21 +403,48 @@
     auth: 'renueva el PAT', error: 'error de la fuente'
   };
   var ACTION_STATE_TEXT = { running: '…', ok: '✓', failed: '✗', timeout: 'tiempo agotado' };
+  var VM_TEXT = { running: ['En ejecución', 'succeeded'], suspended: ['Suspendida', 'partiallySucceeded'], off: ['Apagada', 'none'] };
 
   var $ = function (id) { return document.getElementById(id); };
   var lastEvent = Date.now();
   var connected = false;
-  var tiles = {};              // sensor id -> {el, value, sub}
-  var tileIds = '';
+  var hist = {};               // sensor id -> [{t, v}] of the last few minutes (client memory only)
+  var sensorState = {};        // sensor id -> state of its latest reading
+  var gotSensors = false;      // a sensors event has arrived (so a missing sensor is really missing)
+  var memTotalGiB = 0;         // from the processes event; turns used GB into a share
+  var chartMin = 1;            // time window of the charts, in minutes
+  var charts = [];             // [{def, el, canvas, legend: {key -> {lv, al, sw}}}]
+  var procSnaps = [];          // last SMOOTH_N processes readings
   var buttons = {};            // static action id -> ui
-  var expanded = {};           // compose project -> true while its containers are shown
   var dockUIs = [];            // buttons of the last docker render
   var confirmRequired = [];
   var liveActions = {};        // action id -> latest item of the actions event
   var armTimers = {};          // action id -> {ui, timer} of the "¿Confirmar?" window
+  var firstSeen = {};          // exec id -> when this client first saw it finished
+  var fadeScheduled = {};      // exec id -> true once its fade timers exist
+  var intent = {};             // pair key -> 'on' | 'off': what the last press asked for
+  var intentObs = {};          // pair key -> what was observed when it was pressed
+  var intentExpire = {};       // pair key -> when a finished action's intent stops counting
   var dockerEnabled = false;
   var lastDocker = null;
+  var lastMedia = null;
+  var coverShown = '';         // cover id currently requested ("" = skeleton)
+  var volHold = 0;             // until when the bar keeps what the user set, over what the PC reports
+  var volDrag = false;         // a finger / the mouse is on the bar
+  var volLast = -1;            // last level sent while dragging
+  var volBusy = false;         // a volume POST is in flight
+  var volNext = null;          // newest level waiting for it
+  var mediaAt = 0;             // Date.now() when lastMedia arrived
+  var lastVM = null;
   var topShown = 5;
+  var detail = null;           // open detail view: {kind: 'project'|'container', key, title, back}
+  var es = null;               // the EventSource
+  var lastRestart = 0;
+  var deadSince = 0;
+  var logsTimer = null;
+  var logsBusy = false;
+  var logsFirst = true;
+  var colorMap = {};           // container id -> colour of the open project
 
   function getToken() {
     try { return localStorage.getItem(TOKEN_KEY) || ''; } catch (e) { return ''; }
@@ -305,6 +486,15 @@
     return s < 60 ? s + ' s' : Math.round(s / 60) + ' min';
   }
 
+  function formatClock(sec) {
+    sec = Math.max(0, Math.floor(sec));
+    var h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60;
+    var mm = (h && m < 10 ? '0' : '') + m, ss = (s < 10 ? '0' : '') + s;
+    return h ? h + ':' + mm + ':' + ss : mm + ':' + ss;
+  }
+
+  function two(n) { return (n < 10 ? '0' : '') + n; }
+
   // ---- pager: swipe between panels ----
 
   var pager = $('pager');
@@ -329,83 +519,477 @@
     });
   });
   tabBtns.forEach(function (b, i) { b.addEventListener('click', function () { goTo(i, true); }); });
-  window.addEventListener('resize', function () { goTo(currentPage(), false); });
+  window.addEventListener('resize', function () { goTo(currentPage(), false); drawCharts(); });
   (function restorePage() {
     var n = 0;
     try { n = parseInt(localStorage.getItem(PAGE_KEY), 10) || 0; } catch (e) { n = 0; }
     if (n > 0 && n < tabBtns.length) { goTo(n, false); markTab(n); }
   })();
 
-  // ---- sensors ----
+  // ---- charts ----
+  // The history lives in this page (and a copy in the phone's storage, so a reload keeps
+  // it); the PC stores nothing. Colours, ranges and the "danger" levels are presentation,
+  // so they are decided here.
 
-  function buildTiles(items) {
-    var grid = $('tiles');
-    grid.textContent = '';
-    tiles = {};
-    items.forEach(function (it) {
-      var t = el('div', 'tile');
-      var value = el('div', 'value', '—');
-      var sub = el('div', 'sub');
-      t.appendChild(el('div', 'label', it.label)); t.appendChild(value); t.appendChild(sub);
-      grid.appendChild(t);
-      tiles[it.id] = { el: t, value: value, sub: sub };
+  var DANGER_RED = '#ff4d4d';
+  var SERIES = {
+    'cpu.load': { name: 'CPU', color: '#4a90d9', warn: 80, danger: 95 },      // % of CPU
+    'ram.used': { name: 'RAM', color: '#b07cd9', warn: 80, danger: 92 },      // % of installed RAM
+    'cpu.temp': { name: 'CPU', color: '#ff8a5c', warn: 80, danger: 90 },      // °C
+    'gpu.temp': { name: 'GPU', color: '#3ec9c9', warn: 80, danger: 88 },      // °C
+    'net.down': { name: '↓ Bajada', color: '#e86fb0' },
+    'net.up': { name: '↑ Subida', color: '#b8d84a' }                       // optional: only if the PC reports it
+  };
+  var CHART_DEFS = [
+    { title: 'CPU y RAM', keys: ['cpu.load', 'ram.used'], axis: 'pct', box: 'charts' },       // fixed 0-100 %
+    { title: 'Temperaturas', keys: ['cpu.temp', 'gpu.temp'], axis: 'temp', box: 'charts' },   // fixed minimum, moving maximum
+    { title: 'Red', keys: ['net.down', 'net.up'], axis: 'net', box: 'netBox' }                          // fixed minimum, moving maximum
+  ];
+  var TEMP_MIN = 20;
+  var GAP_MS = 20000;          // a longer silence breaks the line
+
+  function loadHist() {
+    try {
+      var o = JSON.parse(localStorage.getItem(HIST_KEY));
+      if (o && o.series && Date.now() - o.savedAt < HIST_KEEP_MS) { hist = o.series; }
+    } catch (e) { hist = {}; }
+    pruneHist();
+  }
+  function pruneHist() {
+    var cut = Date.now() - HIST_KEEP_MS;
+    Object.keys(hist).forEach(function (k) {
+      var a = hist[k];
+      if (!Array.isArray(a)) { delete hist[k]; return; }
+      hist[k] = a.filter(function (pt) { return pt && pt.t >= cut && isFinite(pt.v); });
     });
+  }
+  function saveHist() {
+    try { localStorage.setItem(HIST_KEY, JSON.stringify({ savedAt: Date.now(), series: hist })); } catch (e) { /* not essential */ }
+  }
+  setInterval(saveHist, 15000);
+  window.addEventListener('pagehide', saveHist);
+
+  function readChartWindow() {
+    var m = 1;
+    try { m = parseInt(localStorage.getItem(WINDOW_KEY), 10) || 1; } catch (e) { m = 1; }
+    chartMin = m === 5 ? 5 : 1;
+  }
+  function paintWindowSel() {
+    Array.prototype.forEach.call(document.querySelectorAll('#winSel button'), function (b) {
+      b.className = Number(b.getAttribute('data-m')) === chartMin ? 'on' : '';
+    });
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('#winSel button'), function (b) {
+    b.addEventListener('click', function () {
+      chartMin = Number(b.getAttribute('data-m'));
+      try { localStorage.setItem(WINDOW_KEY, String(chartMin)); } catch (e) { /* not essential */ }
+      paintWindowSel();
+      drawCharts();
+    });
+  });
+
+  // The value as plotted: RAM becomes a share of the installed memory so it shares the
+  // 0-100 axis with the CPU. Null while the total is not known yet.
+  function plotted(key, v) {
+    if (key === 'ram.used') { return memTotalGiB > 0 ? v / memTotalGiB * 100 : null; }
+    return v;
+  }
+  function levelOf(key, pv) {
+    var d = SERIES[key];
+    if (pv === null || !d) { return 0; }
+    return d.danger && pv >= d.danger ? 2 : d.warn && pv >= d.warn ? 1 : 0;
+  }
+  function latest(key) {
+    var a = hist[key];
+    if (!a || !a.length || sensorState[key] !== 'ok') { return null; }
+    var pt = a[a.length - 1];
+    return Date.now() - pt.t < 30000 ? pt.v : null;
+  }
+  function shortBytes(v) {
+    if (v >= 1e6) { return (v / 1e6).toFixed(v >= 1e7 ? 0 : 1) + ' MB/s'; }
+    if (v >= 1e3) { return Math.round(v / 1e3) + ' KB/s'; }
+    return Math.round(v) + ' B/s';
+  }
+  function niceCeil(v) {
+    var m = Math.max(v, 100e3);
+    var p = Math.pow(10, Math.floor(Math.log(m) / Math.LN10));
+    var f = m / p;
+    return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p;
+  }
+
+  // Window [t0, t1] -> the highest value any of the chart's series reached in it.
+  function peak(def, t0, key2val) {
+    var m = 0;
+    def.keys.forEach(function (k) {
+      (hist[k] || []).forEach(function (pt) { if (pt.t >= t0) { var v = key2val ? key2val(k, pt.v) : pt.v; if (v !== null && v > m) { m = v; } } });
+    });
+    return m;
+  }
+
+  function axisOf(def, t0) {
+    if (def.axis === 'pct') { return { min: 0, max: 100, ticks: [0, 50, 100], fmt: function (v) { return Math.round(v) + '%'; } }; }
+    if (def.axis === 'temp') {
+      var top = Math.max(60, Math.min(120, Math.ceil((peak(def, t0) + 8) / 10) * 10));
+      return { min: TEMP_MIN, max: top, ticks: [TEMP_MIN, Math.round((TEMP_MIN + top) / 2), top], fmt: function (v) { return Math.round(v) + '°'; } };
+    }
+    var mx = niceCeil(peak(def, t0) * 1.15);
+    return { min: 0, max: mx, ticks: [0, mx / 2, mx], fmt: shortBytes };
+  }
+
+  function legendText(key, v) {
+    if (v === null) { return '—'; }
+    if (key === 'ram.used') {
+      var pv = plotted(key, v);
+      return v.toFixed(1) + ' GB' + (pv === null ? '' : ' · ' + Math.round(pv) + '%');
+    }
+    if (key === 'net.down' || key === 'net.up') { return shortBytes(v); }
+    if (key === 'cpu.load') { return Math.round(v) + ' %'; }
+    return Math.round(v) + '°C';
+  }
+
+  function buildCharts() {
+    $('charts').textContent = ''; $('netBox').textContent = '';
+    charts = CHART_DEFS.map(function (def) {
+      var root = el('div', 'chart');
+      var head = el('div', 'chead');
+      head.appendChild(el('span', 'ctitle', def.title));
+      var legend = {};
+      def.keys.forEach(function (k) {
+        var d = SERIES[k];
+        var lg = el('span', 'lg');
+        var sw = el('i', 'sw'); sw.style.background = d.color;
+        var lv = el('b', 'lv none', '—');
+        var al = el('span', 'al');
+        lg.appendChild(sw); lg.appendChild(el('span', 'ln', d.name)); lg.appendChild(lv); lg.appendChild(al);
+        head.appendChild(lg);
+        legend[k] = { root: lg, lv: lv, al: al };
+      });
+      var wrap = el('div', 'cwrap');
+      var canvas = document.createElement('canvas');
+      wrap.appendChild(canvas);
+      root.appendChild(head); root.appendChild(wrap);
+      $(def.box).appendChild(root);
+      return { def: def, el: root, canvas: canvas, legend: legend };
+    });
+  }
+
+  // Legend values, danger marks and the panel's border follow the latest readings.
+  function updateLegends() {
+    charts.forEach(function (ch) {
+      var worst = 0;
+      ch.def.keys.forEach(function (k) {
+        var v = latest(k), lg = ch.legend[k];
+        lg.root.style.display = gotSensors && !(k in sensorState) ? 'none' : '';   // the PC does not report this sensor
+        var lvl = v === null ? 0 : levelOf(k, plotted(k, v));
+        worst = Math.max(worst, lvl);
+        lg.lv.textContent = legendText(k, v);
+        lg.lv.className = 'lv' + (v === null ? ' none' : lvl === 2 ? ' danger' : lvl === 1 ? ' warn' : '');
+        lg.al.textContent = lvl === 2 ? '⚠' : '';
+      });
+      ch.el.className = 'chart' + (worst === 2 ? ' danger' : worst === 1 ? ' warn' : '');
+    });
+  }
+
+  function drawChart(ch, now) {
+    var cv = ch.canvas;
+    var w = cv.clientWidth, h = cv.clientHeight;
+    if (w < 40 || h < 20) { return; }
+    var dpr = window.devicePixelRatio || 1;
+    if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
+      cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+    }
+    var g = cv.getContext('2d');
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, w, h);
+
+    var win = chartMin * 60000, t0 = now - win;
+    var ax = axisOf(ch.def, t0);
+    var L = 40, R = 4, T = 4, B = 12;
+    var pw = w - L - R, ph = h - T - B;
+    var X = function (t) { return L + (t - t0) / win * pw; };
+    var Y = function (v) { return T + (1 - (Math.min(Math.max(v, ax.min), ax.max) - ax.min) / (ax.max - ax.min)) * ph; };
+
+    // danger zone: from the lowest danger level of the chart's series up to the top
+    var dz = null;
+    ch.def.keys.forEach(function (k) {
+      var d = SERIES[k];
+      if (d.danger && d.danger > ax.min && d.danger < ax.max && (dz === null || d.danger < dz)) { dz = d.danger; }
+    });
+    if (dz !== null) {
+      g.fillStyle = 'rgba(255,77,77,.09)';
+      g.fillRect(L, T, pw, Y(dz) - T);
+      g.strokeStyle = 'rgba(255,77,77,.45)';
+      g.setLineDash([3, 3]);
+      g.beginPath(); g.moveTo(L, Y(dz)); g.lineTo(L + pw, Y(dz)); g.stroke();
+      g.setLineDash([]);
+    }
+
+    // grid and value labels
+    g.font = '9px system-ui, sans-serif';
+    g.textBaseline = 'middle';
+    g.textAlign = 'right';
+    ax.ticks.forEach(function (tv) {
+      g.strokeStyle = '#1c1c1c';
+      g.beginPath(); g.moveTo(L, Y(tv)); g.lineTo(L + pw, Y(tv)); g.stroke();
+      g.fillStyle = '#6a6a6a';
+      g.fillText(ax.fmt(tv), L - 4, Math.min(Math.max(Y(tv), T + 4), T + ph - 4));
+    });
+    g.textBaseline = 'alphabetic';
+    g.textAlign = 'left';
+    g.fillStyle = '#555';
+    g.fillText('−' + (chartMin === 1 ? '60 s' : '5 min'), L, h - 1);
+    g.textAlign = 'right';
+    g.fillText('ahora', L + pw, h - 1);
+
+    // series
+    ch.def.keys.forEach(function (k) {
+      var d = SERIES[k];
+      var pts = (hist[k] || []).filter(function (pt) { return pt.t >= t0 - GAP_MS && pt.t <= now; });
+      var xy = pts.map(function (pt) { var pv = plotted(k, pt.v); return pv === null ? null : { x: X(pt.t), y: Y(pv), t: pt.t, pv: pv }; });
+      g.strokeStyle = d.color; g.lineWidth = 1.8; g.lineJoin = 'round';
+      g.beginPath();
+      var prev = null;
+      xy.forEach(function (q) {
+        if (!q) { prev = null; return; }
+        if (prev && q.t - prev.t <= GAP_MS) { g.lineTo(q.x, q.y); } else { g.moveTo(q.x, q.y); }
+        prev = q;
+      });
+      g.stroke();
+      // the live reading: a dot at the newest point, red when that value is in danger
+      var last = prev;
+      if (last && sensorState[k] === 'ok') {
+        g.fillStyle = levelOf(k, last.pv) === 2 ? DANGER_RED : d.color;
+        g.beginPath(); g.arc(Math.min(last.x, L + pw - 2), last.y, 3, 0, 6.2832); g.fill();
+      }
+    });
+  }
+
+  function drawCharts() {
+    var now = Date.now();
+    charts.forEach(function (ch) { drawChart(ch, now); });
   }
 
   function renderSensors(data) {
-    var ids = data.items.map(function (i) { return i.id; }).join('|');
-    if (ids !== tileIds) { tileIds = ids; buildTiles(data.items); }
+    var now = Date.now();
+    gotSensors = true;
     data.items.forEach(function (it) {
-      var t = tiles[it.id];
-      t.el.className = 'tile ' + it.state;
-      var usable = it.state === 'ok' || it.state === 'stale' || it.state === 'dead';
-      t.value.textContent = usable ? formatValue(it.value, it.unit) : '—';
-      var sub = '';
-      if (it.ageMs !== undefined) { sub = STATE_TEXT[it.state] + ' · ' + formatAge(it.ageMs); }
-      else if (it.state !== 'ok') { sub = STATE_TEXT[it.state] || it.state; }
-      t.sub.textContent = sub;
+      sensorState[it.id] = it.state;
+      if (it.state !== 'ok' || !SERIES[it.id]) { return; }
+      var a = hist[it.id] || (hist[it.id] = []);
+      if (!a.length || now - a[a.length - 1].t > 800) { a.push({ t: now, v: it.value }); }
     });
+    pruneHist();
+    updateLegends();
+    drawCharts();
+  }
+
+  // ---- now playing ----
+
+  // SMTC names the source by its app id: "Spotify.exe", "Chrome._crx_<hash>" for an
+  // installed Chrome app, "Microsoft.ZuneMusic_8wekyb3d8bbwe!Microsoft.ZuneMusic" for a Store app.
+  function appName(id) {
+    var s = (id || '').replace(/\.exe$/i, '');
+    var crx = s.indexOf('._crx_');
+    if (crx > 0) { s = s.slice(0, crx); }
+    var bang = s.lastIndexOf('!');
+    if (bang >= 0) { s = s.slice(bang + 1); var dot = s.lastIndexOf('.'); if (dot >= 0) { s = s.slice(dot + 1); } }
+    return s;
+  }
+
+  function isPlaying() { return !!lastMedia && lastMedia.state === 'ok' && lastMedia.active && lastMedia.status === 'playing'; }
+
+  // The position only arrives every couple of seconds; while playing it is advanced
+  // locally from the moment the reading was taken, and corrected by the next one.
+  function paintCover(id) {
+    if (id === coverShown) { return; }
+    coverShown = id;
+    var box = $('cover'), img = $('coverImg');
+    box.className = 'skel';
+    if (id) { img.src = '/api/media/cover?v=' + encodeURIComponent(id); } else { img.removeAttribute('src'); }
+  }
+  $('coverImg').addEventListener('load', function () { if (coverShown) { $('cover').className = ''; } });
+  $('coverImg').addEventListener('error', function () { $('cover').className = 'skel'; });
+
+  function paintMedia() {
+    var d = lastMedia;
+    if (!d) { return; }
+    $('np').className = d.state === 'ok' ? '' : d.state;
+    var live = d.state !== 'unavailable' && d.active;
+    paintCover(live && d.cover ? d.cover : '');
+    if (!live) {
+      $('npLabel').textContent = 'Reproduciendo';
+      $('npApp').textContent = '';
+      $('npTtl').textContent = d.state === 'unavailable' ? '—' : 'Nada en reproducción';
+      $('npArt').textContent = '';
+      $('npFill').style.width = '0';
+      $('npPos').textContent = ''; $('npDur').textContent = '';
+      return;
+    }
+    var LABEL = { playing: 'Reproduciendo', paused: 'En pausa', stopped: 'Detenido' };
+    $('npLabel').textContent = LABEL[d.status] || 'Reproduciendo';
+    $('npApp').textContent = appName(d.app);
+    $('npTtl').textContent = d.title || '(sin título)';
+    $('npArt').textContent = d.artist || d.album || '';
+    var pos = d.position + (d.status === 'playing' ? (Date.now() - mediaAt) / 1000 : 0);
+    if (d.duration > 0) { pos = Math.min(pos, d.duration); }
+    $('npFill').style.width = d.duration > 0 ? Math.min(100, pos / d.duration * 100) + '%' : '0';
+    $('npPos').textContent = formatClock(pos);
+    $('npDur').textContent = d.duration > 0 ? formatClock(d.duration) : 'en vivo';
+  }
+
+  // ---- volume: the bar sends media.volume.<0-100>; at most one request in flight, the
+  // newest level always wins. The PC's reading is ignored for a moment after a change.
+
+  function paintVol(pct) {
+    $('vol').style.setProperty('--p', pct + '%');
+    $('volVal').textContent = Math.round(pct) + ' %';
+    $('volIcon').textContent = pct === 0 ? '🔇' : pct < 40 ? '🔈' : '🔊';
+    $('volTrack').setAttribute('aria-valuenow', String(Math.round(pct)));
+  }
+  function volOff() { return $('vol').className.indexOf('off') >= 0; }
+  function syncVol(d) {
+    var known = d.state === 'ok' && d.volume >= 0 && getToken() !== '';
+    $('vol').className = ($('vol').className.indexOf('show') >= 0 ? 'show' : '') + (known ? '' : ' off');
+    if (!(d.state === 'ok' && d.volume >= 0)) { $('volVal').textContent = '—'; return; }
+    if (!volDrag && Date.now() > volHold) { paintVol(Math.round(d.volume)); }
+  }
+  function pushVol(n) {
+    volHold = Date.now() + 2500;
+    if (volBusy) { volNext = n; return; }
+    volBusy = true;
+    var done = function () {
+      volBusy = false;
+      if (volNext !== null) { var v = volNext; volNext = null; pushVol(v); }
+    };
+    fetch('/api/do/media.volume.' + n, { method: 'POST', headers: { 'Authorization': 'Bearer ' + getToken() } })
+      .then(function (r) { if (r.status !== 202) { toast(r.status === 401 ? 'Token inválido' : 'Error ' + r.status); } done(); },
+            function () { toast('Sin conexión con el PC'); done(); });
+  }
+  // The track is a plain div: top = 100 %, bottom = 0 %. Pointer events cover finger and mouse.
+  function volApply(e) {
+    var r = $('volTrack').getBoundingClientRect();
+    var n = Math.round(Math.max(0, Math.min(1, 1 - (e.clientY - r.top) / r.height)) * 100);
+    if (n === volLast) { return; }
+    volLast = n;
+    paintVol(n);
+    pushVol(n);
+  }
+  $('volTrack').addEventListener('pointerdown', function (e) {
+    if (volOff()) { return; }
+    volDrag = true; volLast = -1;
+    try { this.setPointerCapture(e.pointerId); } catch (x) { /* not essential */ }
+    volApply(e);
+  });
+  $('volTrack').addEventListener('pointermove', function (e) { if (volDrag) { volApply(e); } });
+  ['pointerup', 'pointercancel'].forEach(function (t) {
+    $('volTrack').addEventListener(t, function () { volDrag = false; });
+  });
+
+  function renderMedia(d) {
+    lastMedia = d;
+    mediaAt = Date.now();
+    paintMedia();
+    syncVol(d);
+    refreshMediaButtons();
   }
 
   // ---- top apps ----
+  // Server readings are 5 s apart and an app near a threshold would blink in and out, so
+  // every value is the average of the last SMOOTH_N readings (an app missing from a
+  // reading counts as 0, so a departing app fades instead of vanishing).
 
-  function appRow(it, valueText, pct, barClass) {
-    var row = el('div', 'app');
+  function smoothed() {
+    var n = procSnaps.length, acc = {}, total = 0;
+    procSnaps.forEach(function (snap) {
+      total = snap.total || total;
+      snap.items.forEach(function (it) {
+        var a = acc[it.id] || (acc[it.id] = { label: it.label, count: it.count, cpu: 0, mem: 0 });
+        a.label = it.label; a.count = it.count; a.cpu += it.cpu; a.mem += it.mem;
+      });
+    });
+    return {
+      total: total,
+      items: Object.keys(acc).map(function (id) {
+        return { id: id, label: acc[id].label, count: acc[id].count, cpu: acc[id].cpu / n, mem: acc[id].mem / n };
+      })
+    };
+  }
+
+  function appRow(it, valueText, pct, barClass, scale, faint) {
+    var row = el('div', 'app' + (pct >= HOT ? ' hot' : '') + (faint ? ' faint' : ''));
     var line = el('div', 'row');
     var name = it.label.replace(/\.exe$/i, '') + (it.count > 1 ? ' ×' + it.count : '');
     line.appendChild(el('span', 'nm', name));
     line.appendChild(el('span', 'val', valueText));
     var bar = el('div', 'bar ' + barClass);
     var fill = document.createElement('i');
-    fill.style.width = Math.max(1, Math.min(100, pct)) + '%';
+    fill.style.width = Math.max(2, Math.min(100, pct / scale * 100)) + '%';
     bar.appendChild(fill);
     row.appendChild(line); row.appendChild(bar);
     return row;
   }
 
-  function fillApps(box, rows, emptyText) {
+  // rows: [{it, v}] best first. Keep the top topShown, drop those under the floor, but
+  // never fewer than MIN_SHOWN (the extras are drawn faint).
+  function pick(rows, floor) {
+    var top = rows.slice(0, topShown);
+    var keep = top.filter(function (r) { return r.v >= floor; });
+    if (keep.length >= Math.min(MIN_SHOWN, top.length)) { return keep.map(function (r) { return { r: r, faint: false }; }); }
+    return top.slice(0, MIN_SHOWN).map(function (r) { return { r: r, faint: r.v < floor }; });
+  }
+
+  function fillApps(box, picked, unit, barClass, text) {
     box.textContent = '';
-    if (!rows.length) { box.appendChild(el('div', 'quiet', emptyText)); return; }
-    rows.forEach(function (r) { box.appendChild(r); });
+    if (!picked.length) { box.appendChild(el('div', 'quiet', 'Sin datos aún')); return; }
+    var scale = Math.max(HOT * 2, picked[0].r.v);
+    picked.forEach(function (p) { box.appendChild(appRow(p.r.it, text(p.r), p.r.v, barClass, scale, p.faint)); });
   }
 
   function renderProcesses(data) {
     $('apps').className = data.state === 'ok' ? '' : data.state;
+    if (data.memTotal) { memTotalGiB = data.memTotal / 1073741824; updateLegends(); }
     var items = data.items || [];
     if (data.state !== 'ok' && !items.length) {
       var why = STATE_TEXT[data.state] || data.state;
-      fillApps($('appsCpu'), [], why); fillApps($('appsMem'), [], why);
+      [$('appsCpu'), $('appsMem')].forEach(function (b) { b.textContent = ''; b.appendChild(el('div', 'quiet', why)); });
       return;
     }
-    var total = data.memTotal || 0;
-    var cpuRows = items.filter(function (it) { return it.cpu >= THRESHOLD; })
-      .sort(function (a, b) { return b.cpu - a.cpu; }).slice(0, topShown)
-      .map(function (it) { return appRow(it, it.cpu.toFixed(1) + ' %', it.cpu, 'cpu'); });
-    var memRows = total > 0 ? items.filter(function (it) { return it.mem / total * 100 >= THRESHOLD; })
-      .sort(function (a, b) { return b.mem - a.mem; }).slice(0, topShown)
-      .map(function (it) { var pct = it.mem / total * 100; return appRow(it, formatBytes(it.mem) + ' · ' + Math.round(pct) + ' %', pct, 'mem'); }) : [];
-    fillApps($('appsCpu'), cpuRows, 'Ninguna pasa del ' + THRESHOLD + ' %');
-    fillApps($('appsMem'), memRows, 'Ninguna pasa del ' + THRESHOLD + ' %');
+    if (data.state === 'ok') {
+      procSnaps.push({ items: items, total: data.memTotal || 0 });
+      if (procSnaps.length > SMOOTH_N) { procSnaps.shift(); }
+    }
+    var sm = smoothed();
+    var cpuRows = sm.items.map(function (it) { return { it: it, v: it.cpu }; }).sort(function (a, b) { return b.v - a.v; });
+    var memRows = sm.total > 0 ? sm.items.map(function (it) { return { it: it, v: it.mem / sm.total * 100 }; }).sort(function (a, b) { return b.v - a.v; }) : [];
+    fillApps($('appsCpu'), pick(cpuRows, FLOOR_CPU), '%', 'cpu', function (r) { return r.v.toFixed(1) + ' %'; });
+    fillApps($('appsMem'), pick(memRows, FLOOR_RAM), '%', 'mem', function (r) { return formatBytes(r.it.mem) + ' · ' + Math.round(r.v) + ' %'; });
+  }
+
+  // ---- virtual machine ----
+
+  function renderVM(d) {
+    lastVM = d;
+    $('vmCard').className = d.state === 'ok' ? '' : d.state;
+    $('vmName').textContent = d.name || '—';
+    var chip = $('vmState');
+    var stats = $('vmStats');
+    stats.textContent = '';
+    if (d.state !== 'ok' && d.state !== 'stale' && d.state !== 'dead') {
+      chip.className = 'chip none';
+      chip.textContent = STATE_TEXT[d.state] || d.state;
+    } else {
+      var t = VM_TEXT[d.vm] || [d.vm, 'none'];
+      chip.className = 'chip ' + t[1];
+      chip.textContent = t[0] + (d.state === 'ok' ? '' : ' · ' + STATE_TEXT[d.state]);
+      if (d.vm === 'running') {
+        var cpu = el('span'); cpu.appendChild(document.createTextNode('CPU ')); cpu.appendChild(el('b', '', d.cpu.toFixed(1) + ' %'));
+        var mem = el('span'); mem.appendChild(document.createTextNode('RAM ')); mem.appendChild(el('b', '', formatBytes(d.mem)));
+        stats.appendChild(cpu); stats.appendChild(mem);
+        if (d.running > 1) { stats.appendChild(el('span', '', 'sumado de ' + d.running + ' VMs')); }
+      }
+    }
+    reconcileIntent();
+    refreshAll();
   }
 
   // ---- CI ----
@@ -454,7 +1038,64 @@
     return Object.keys(buttons).map(function (id) { return buttons[id]; }).concat(dockUIs);
   }
 
-  function refreshUI(ui) { ui.el.disabled = !ui.tokenOk || ui.busy || ui.off; }
+  // Start/stop actions come in pairs. After one is pressed it locks and its opposite
+  // unlocks at once, even while it is still running. Without a press the lock follows
+  // what is actually observed. 'on' is the start side, 'off' the stop side.
+  function pairOf(id) {
+    if (id === 'docker.start' || id === 'docker.stop') { return { key: 'docker', side: id === 'docker.start' ? 'on' : 'off' }; }
+    if (id === 'vm.start' || id === 'vm.stop') { return { key: 'vm', side: id === 'vm.start' ? 'on' : 'off' }; }
+    var m = /^(container|project)\.(start|stop)\.(.+)$/.exec(id);
+    return m ? { key: m[1] + ':' + m[3], side: m[2] === 'start' ? 'on' : 'off' } : null;
+  }
+
+  // 'on', 'off', or null when it cannot be told (unknown, or a project half running).
+  function observed(key) {
+    if (key === 'docker') { return lastDocker && lastDocker.state === 'ok' ? (lastDocker.engine ? 'on' : 'off') : null; }
+    if (key === 'vm') { return lastVM && lastVM.state === 'ok' ? (lastVM.vm === 'running' ? 'on' : 'off') : null; }
+    if (!lastDocker || lastDocker.state !== 'ok') { return null; }
+    var colon = key.indexOf(':');
+    var kind = key.slice(0, colon), name = key.slice(colon + 1);
+    var running = 0, total = 0;
+    lastDocker.items.forEach(function (c) {
+      if (kind === 'container' ? c.id === name : c.project === name) { total++; if (c.state === 'running') { running++; } }
+    });
+    if (!total) { return null; }
+    return running === total ? 'on' : running === 0 ? 'off' : null;
+  }
+
+  function lockedSide(key) { return intent[key] || observed(key); }
+
+  // An intent lasts until the world changes under it: then what is observed rules.
+  function reconcileIntent() {
+    var now = Date.now();
+    Object.keys(intent).forEach(function (key) {
+      var expired = intentExpire[key] && now >= intentExpire[key];
+      if (expired || observed(key) !== intentObs[key]) { forgetIntent(key); }
+    });
+  }
+
+  function forgetIntent(key) { delete intent[key]; delete intentObs[key]; delete intentExpire[key]; }
+
+  function dropIntent(id) {
+    var p = pairOf(id);
+    if (p) { forgetIntent(p.key); }
+  }
+
+  // The action ended fine: if what is observed still has not caught up shortly after
+  // (a container that started and died, say), stop trusting the press so nothing stays locked.
+  function settleIntent(id) {
+    var p = pairOf(id);
+    if (!p || intent[p.key] !== p.side || intentExpire[p.key]) { return; }
+    intentExpire[p.key] = Date.now() + INTENT_GRACE_MS;
+    setTimeout(function () { reconcileIntent(); refreshAll(); }, INTENT_GRACE_MS + 50);
+  }
+
+  function lockedBy(ui) {
+    var p = ui.id ? pairOf(ui.id) : null;
+    return !!p && lockedSide(p.key) === p.side;
+  }
+
+  function refreshUI(ui) { ui.el.disabled = !ui.tokenOk || ui.busy || ui.off || lockedBy(ui); }
 
   function updateButtonsEnabled() {
     var has = getToken() !== '';
@@ -490,6 +1131,8 @@
       return;
     }
     disarm(id);
+    var p = pairOf(id);
+    if (p) { intent[p.key] = p.side; intentObs[p.key] = observed(p.key); refreshAll(); }
     send(id);
   }
 
@@ -512,66 +1155,107 @@
                            function () { return { status: r.status, body: {} }; });
     }).then(function (res) {
       if (res.status === 202) { return; }
+      if (res.status !== 409) { dropIntent(id); refreshAll(); }   // 409: it is already running, keep the lock
       var msgs = {
         401: 'Token inválido',
         404: 'Acción desconocida o el contenedor ya no existe',
-        409: 'Ya se está ejecutando',
-        429: 'Espera ' + Math.ceil((res.body.retryAfterMs || 2000) / 1000) + ' s'
+        409: 'Ya se está ejecutando'
       };
       toast(msgs[res.status] || 'Error ' + res.status);
-    }).catch(function () { toast('Sin conexión con el PC'); });
+    }).catch(function () { dropIntent(id); refreshAll(); toast('Sin conexión con el PC'); });
   }
 
-  function makeUI(labelFn) {
+  function makeUI(id, labelFn) {
     var b = el('button', 'act');
     b.type = 'button';
     var name = el('span', 'name', labelFn());
     var st = el('span', 'st');
     b.appendChild(name); b.appendChild(st);
-    return { el: b, name: name, st: st, label: labelFn, busy: false, off: false, tokenOk: getToken() !== '' };
+    return { id: id, el: b, name: name, st: st, label: labelFn, busy: false, off: false, tokenOk: getToken() !== '' };
+  }
+
+  function actionLabel(id) {
+    if (id === 'media.playpause') { return isPlaying() ? '⏸' : '▶'; }
+    return ACTION_NAMES[id] || id;
   }
 
   function buildButtons(ids) {
     ['ctrl', 'dockerActs', 'vmActs'].forEach(function (id) { $(id).textContent = ''; });
     buttons = {};
-    var ORDER = ['media.playpause', 'media.next', 'vm.start', 'vm.suspend', 'docker.start', 'docker.stop'];
     ids.slice().sort(function (a, b) { return ORDER.indexOf(a) - ORDER.indexOf(b); }).forEach(function (id) {
-      var ui = makeUI(function () { return ACTION_NAMES[id] || id; });
+      var ui = makeUI(id, function () { return actionLabel(id); });
       ui.el.addEventListener('click', function () { onTap(id, ui); });
       $(PLACE[id] || 'ctrl').appendChild(ui.el);
       buttons[id] = ui;
     });
+    $('vol').className = (buttons['media.playpause'] ? 'show' : '') + ($('vol').className.indexOf('off') >= 0 ? ' off' : '');
+    refreshMediaButtons();
     updateButtonsEnabled();
+  }
+
+  // The play/pause symbol follows the real state; seeking needs a track to seek in.
+  function refreshMediaButtons() {
+    var pp = buttons['media.playpause'];
+    if (pp && !armTimers['media.playpause']) { pp.name.textContent = actionLabel('media.playpause'); }
+    var canSeek = !!lastMedia && lastMedia.state === 'ok' && lastMedia.active && lastMedia.duration > 0;
+    ['media.seek_back', 'media.seek_fwd'].forEach(function (id) {
+      if (buttons[id]) { buttons[id].off = !canSeek; refreshUI(buttons[id]); }
+    });
+  }
+
+  // What to show for an action's mark: nothing once it has faded, fading, or fully.
+  function actionView(s) {
+    if (s.state === 'running') { return { show: true, fade: false }; }
+    var t = FADE[s.state] || FADE.ok;
+    var now = Date.now();
+    if (!firstSeen[s.exec]) { firstSeen[s.exec] = now; }
+    var age = now - firstSeen[s.exec];
+    if (!fadeScheduled[s.exec]) {
+      fadeScheduled[s.exec] = true;
+      [t[0], t[1]].forEach(function (at) { setTimeout(refreshAll, Math.max(0, at - age) + 30); });
+    }
+    return { show: age < t[1], fade: age >= t[0] };
   }
 
   // Shows the state of one action on its button and locks it while it runs.
   function showAction(ui, s) {
     ui.el.classList.remove('running', 'ok', 'failed', 'timeout');
+    ui.st.className = 'st';
     ui.st.textContent = '';
     ui.busy = !!s && s.state === 'running';
     if (s) {
-      ui.el.classList.add(s.state);
-      ui.st.textContent = ACTION_STATE_TEXT[s.state] + (s.message && s.state !== 'ok' ? ' ' + s.message : '');
+      var v = actionView(s);
+      if (v.show) {
+        ui.el.classList.add(s.state);
+        ui.st.textContent = ACTION_STATE_TEXT[s.state] + (s.message && s.state !== 'ok' ? ' ' + s.message : '');
+        if (v.fade) { ui.st.classList.add('fade'); }
+      }
     }
     refreshUI(ui);
   }
 
-  function renderActions(data) {
-    liveActions = {};
-    data.items.forEach(function (it) { liveActions[it.id] = it; });   // finished items drop out after 60 s
+  function refreshAll() {
     Object.keys(buttons).forEach(function (id) { showAction(buttons[id], liveActions[id]); });
     if (lastDocker) { renderDocker(lastDocker); }
+    refreshMediaButtons();
   }
 
-  // ---- docker ----
+  function renderActions(data) {
+    liveActions = {};
+    data.items.forEach(function (it) {
+      liveActions[it.id] = it;
+      if (it.state === 'failed' || it.state === 'timeout') { dropIntent(it.id); }   // it did not happen: unlock
+      else if (it.state === 'ok') { settleIntent(it.id); }
+    });
+    refreshAll();
+  }
+
+  // ---- docker: list view ----
   // Containers of one compose project are shown as a single parent card (like Docker
-  // Desktop); "Ver" unfolds its children. The list is rebuilt on every event: it is small.
+  // Desktop). Every card, parent or not, has the same three buttons: Encender, Apagar
+  // and Abrir (the logs). The list is rebuilt on every event: it is small.
 
   function isRunning(c) { return c.state === 'running'; }
-
-  function containerAction(cid) {
-    return liveActions['container.stop.' + cid] || liveActions['container.start.' + cid];
-  }
 
   function stat(parent, text, title) {
     var d = el('div', '', text);
@@ -579,17 +1263,47 @@
     parent.appendChild(d);
   }
 
-  // Inside a project card the "<project>-" prefix of a container name is noise.
+  // Inside a project the "<project>-" prefix of a container name is noise.
   function shortName(c) {
     var p = c.project + '-';
     return c.project && c.name.indexOf(p) === 0 && c.name.length > p.length ? c.name.slice(p.length) : c.name;
   }
 
-  function containerCard(c, child) {
+  function actionButton(id, text) {
+    var ui = makeUI(id, function () { return text; });
+    ui.el.addEventListener('click', function () { onTap(id, ui); });
+    adoptArm(id, ui);
+    showAction(ui, liveActions[id]);
+    dockUIs.push(ui);
+    return ui.el;
+  }
+
+  function openButton(target) {
+    var b = el('button', 'act open', 'Abrir ▸');
+    b.type = 'button';
+    b.addEventListener('click', function () { openDetail(target); });
+    return b;
+  }
+
+  // Start and stop are a pair: the side that matches the state is the locked one.
+  function buttonRow(startId, stopId, target) {
+    var row = el('div', 'grow');
+    row.appendChild(actionButton(startId, '▶ Encender'));
+    row.appendChild(actionButton(stopId, '■ Apagar'));
+    if (target) { row.appendChild(openButton(target)); }
+    return row;
+  }
+
+  // parent: the project whose detail view this card sits in (so "Volver" can go back to it).
+  // inDetail: this is the container's own detail view, where "Abrir" would open itself.
+  function containerCard(c, child, parent, inDetail) {
     var running = isRunning(c);
     var root = el('div', 'ctr ' + c.state + (child ? ' child' : ''));
+    if (child && colorMap[c.id]) { root.style.borderLeftColor = colorMap[c.id]; }
     var top = el('div', 'top');
-    top.appendChild(el('span', 'name', child ? shortName(c) : c.name));
+    var nm = el('span', 'name', child && parent ? shortName(c) : c.name);
+    if (child && colorMap[c.id]) { nm.style.color = colorMap[c.id]; }
+    top.appendChild(nm);
     top.appendChild(el('span', 'badge', c.status || c.state));
     root.appendChild(top);
     root.appendChild(el('div', 'sub', c.image));
@@ -601,25 +1315,47 @@
     }
     if (c.ports) { stat(m, c.ports, c.ports); }
     root.appendChild(m);
-
-    var id = (running ? 'container.stop.' : 'container.start.') + c.id;
-    var ui = makeUI(function () { return running ? '■ Apagar' : '▶ Encender'; });
-    ui.el.addEventListener('click', function () { onTap(id, ui); });
-    adoptArm(id, ui);
-    showAction(ui, containerAction(c.id));
-    root.appendChild(ui.el);
-    dockUIs.push(ui);
+    var target = inDetail ? null : {
+      kind: 'container', key: c.id, title: c.name,
+      back: parent ? { kind: 'project', key: parent, title: parent } : null
+    };
+    root.appendChild(buttonRow('container.start.' + c.id, 'container.stop.' + c.id, target));
     return root;
   }
 
-  function groupButton(id, text, off) {
-    var ui = makeUI(function () { return text; });
-    ui.off = off;
-    ui.el.addEventListener('click', function () { onTap(id, ui); });
-    adoptArm(id, ui);
-    showAction(ui, liveActions[id]);
-    dockUIs.push(ui);
-    return ui.el;
+  function groupCard(name, list) {
+    var run = list.filter(isRunning);
+    var cpu = 0, mem = 0, haveStats = false;
+    run.forEach(function (c) {
+      if (c.cpu !== null) { cpu += c.cpu; haveStats = true; }
+      if (c.mem !== null) { mem += c.mem; }
+    });
+    var root = el('div', 'ctr group ' + (run.length ? 'running' : 'exited'));
+    var top = el('div', 'top');
+    top.appendChild(el('span', 'name', name));
+    top.appendChild(el('span', 'badge', run.length + '/' + list.length + ' en ejecución'));
+    root.appendChild(top);
+    root.appendChild(el('div', 'sub', list.length + (list.length === 1 ? ' contenedor' : ' contenedores')));
+    var m = el('div', 'meters');
+    if (haveStats) { stat(m, 'CPU ' + cpu.toFixed(1) + ' %'); stat(m, 'RAM ' + formatBytes(mem)); }
+    root.appendChild(m);
+    root.appendChild(buttonRow('project.start.' + name, 'project.stop.' + name,
+      { kind: 'project', key: name, title: name, back: null }));
+    return root;
+  }
+
+  // ---- docker: detail view (containers on the left, logs on the right) ----
+  // It shows either a whole compose project (logs of all its containers, merged) or one
+  // container. "Volver" goes back to where it was opened from: the project, or the list.
+
+  function members(project) {
+    return lastDocker ? lastDocker.items.filter(function (c) { return c.project === project; }) : [];
+  }
+
+  function detailMembers() {
+    if (!detail || !lastDocker) { return []; }
+    return detail.kind === 'project' ? members(detail.key)
+      : lastDocker.items.filter(function (c) { return c.id === detail.key; });
   }
 
   function sortContainers(list) {
@@ -628,51 +1364,123 @@
     });
   }
 
-  function groupCard(name, members) {
-    var open = !!expanded[name];
-    var run = members.filter(isRunning);
-    var cpu = 0, mem = 0, haveStats = false;
-    run.forEach(function (c) {
-      if (c.cpu !== null) { cpu += c.cpu; haveStats = true; }
-      if (c.mem !== null) { mem += c.mem; }
-    });
-    var root = el('div', 'ctr group ' + (run.length ? 'running' : 'exited') + (open ? ' wide' : ''));
-    var top = el('div', 'top');
-    top.appendChild(el('span', 'name', name));
-    top.appendChild(el('span', 'badge', run.length + '/' + members.length + ' en ejecución'));
-    root.appendChild(top);
-    root.appendChild(el('div', 'sub', members.length + (members.length === 1 ? ' contenedor' : ' contenedores')));
-    var m = el('div', 'meters');
-    if (haveStats) { stat(m, 'CPU ' + cpu.toFixed(1) + ' %'); stat(m, 'RAM ' + formatBytes(mem)); }
-    root.appendChild(m);
-
-    var row = el('div', 'grow');
-    row.appendChild(groupButton('project.start.' + name, '▶ Encender', run.length === members.length));
-    row.appendChild(groupButton('project.stop.' + name, '■ Apagar', run.length === 0));
-    var tog = el('button', 'act toggle', open ? 'Ocultar ▴' : 'Ver ▾');
-    tog.type = 'button';
-    tog.addEventListener('click', function () { expanded[name] = !open; renderDocker(lastDocker); });
-    row.appendChild(tog);
-    root.appendChild(row);
-
-    if (open) {
-      var kids = el('div', 'children');
-      sortContainers(members).forEach(function (c) { kids.appendChild(containerCard(c, true)); });
-      root.appendChild(kids);
-    }
-    return root;
+  function assignColors(list) {
+    colorMap = {};
+    list.slice().sort(function (a, b) { return a.name.localeCompare(b.name); })
+      .forEach(function (c, i) { colorMap[c.id] = LOG_COLORS[i % LOG_COLORS.length]; });
   }
 
-  var pressing = false;        // a pointer is down on the docker list
-  var repaintTimer = null;
+  function renderDetail() {
+    var list = detailMembers();
+    $('dTitle').textContent = detail.title;
+    var box = $('dList'), acts = $('dActs');
+    box.textContent = ''; acts.textContent = '';
+    if (!list.length) {
+      box.appendChild(el('div', 'empty', detail.kind === 'project' ? 'Este proyecto ya no tiene contenedores.' : 'Este contenedor ya no existe.'));
+      return;
+    }
+    assignColors(list);
+    var isProject = detail.kind === 'project';
+    if (isProject) {
+      acts.appendChild(actionButton('project.start.' + detail.key, '▶ Encender todo'));
+      acts.appendChild(actionButton('project.stop.' + detail.key, '■ Apagar todo'));
+    }
+    sortContainers(list).forEach(function (c) {
+      box.appendChild(containerCard(c, true, isProject ? detail.key : null, !isProject));
+    });
+  }
 
-  $('containers').addEventListener('pointerdown', function () { pressing = true; });
+  function setLogsMessage(text) {
+    var box = $('dLogs');
+    box.textContent = '';
+    box.appendChild(el('div', 'quiet', text));
+    logsFirst = true;
+  }
+
+  function renderLogs(data) {
+    var box = $('dLogs');
+    var stick = logsFirst || box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+    var names = {};
+    (data.containers || []).forEach(function (c) {
+      names[c.id] = data.kind === 'project' ? shortName({ project: data.name, name: c.name }) : c.name;
+    });
+    box.textContent = '';
+    if (!data.lines.length) {
+      box.appendChild(el('div', 'quiet', 'Sin logs todavía.'));
+    }
+    var frag = document.createDocumentFragment();
+    data.lines.forEach(function (l) {
+      var row = el('div', 'll');
+      var d = new Date(l.t);
+      row.appendChild(el('span', 'ts', two(d.getHours()) + ':' + two(d.getMinutes()) + ':' + two(d.getSeconds())));
+      var tag = el('span', 'tag', names[l.c] || l.c);
+      tag.style.color = colorMap[l.c] || '#999';
+      row.appendChild(tag);
+      row.appendChild(document.createTextNode(l.m));   // text node: log content is never parsed as HTML
+      frag.appendChild(row);
+    });
+    box.appendChild(frag);
+    if (stick) { box.scrollTop = box.scrollHeight; }
+    logsFirst = false;
+  }
+
+  function fetchLogs() {
+    if (!detail || logsBusy) { return; }
+    var tok = getToken();
+    if (!tok) { setLogsMessage('Introduce el token en ajustes (⚙) para ver los logs.'); return; }
+    var mine = detail;
+    var url = mine.kind === 'project' ? '/api/logs/' + encodeURIComponent(mine.key)
+                                      : '/api/logs/container/' + encodeURIComponent(mine.key);
+    logsBusy = true;
+    fetch(url, { headers: { 'Authorization': 'Bearer ' + tok }, cache: 'no-store' })
+      .then(function (r) {
+        if (r.status === 401) { throw new Error('Token inválido: no se pueden mostrar los logs.'); }
+        if (r.status === 404) { throw new Error('Ya no existe.'); }
+        if (!r.ok) { throw new Error('No se pudieron leer los logs (' + r.status + ').'); }
+        return r.json();
+      })
+      .then(function (data) { logsBusy = false; if (detail === mine) { renderLogs(data); } })
+      .catch(function (e) {
+        logsBusy = false;
+        if (detail === mine) { setLogsMessage(e && e.message ? e.message : 'Sin conexión con el PC.'); }
+      });
+  }
+
+  function openDetail(d) {
+    detail = d;
+    logsFirst = true;
+    logsBusy = false;
+    setLogsMessage('Cargando logs…');
+    $('p1').classList.add('detail');
+    renderDetail();
+    fetchLogs();
+    clearInterval(logsTimer);
+    logsTimer = setInterval(fetchLogs, LOGS_EVERY_MS);
+  }
+
+  function closeDetail() {
+    detail = null;
+    clearInterval(logsTimer);
+    logsTimer = null;
+    $('p1').classList.remove('detail');
+    $('dLogs').textContent = '';
+    if (lastDocker) { renderDocker(lastDocker); }
+  }
+  $('dBack').addEventListener('click', function () {
+    if (detail && detail.back) { openDetail(detail.back); } else { closeDetail(); }
+  });
+
+  // A rebuild between a finger going down and the click would swallow the tap, so
+  // repaints wait for the release.
+  var pressing = false;
+  var repaintTimer = null;
+  $('p1').addEventListener('pointerdown', function () { pressing = true; });
   ['pointerup', 'pointercancel'].forEach(function (ev) {
     document.addEventListener(ev, function () {
       if (!pressing) { return; }
       pressing = false;
-      // Wait out the click that follows pointerup before rebuilding the buttons.
       clearTimeout(repaintTimer);
+      // Wait out the click that follows pointerup before rebuilding the buttons.
       repaintTimer = setTimeout(function () { if (lastDocker) { renderDocker(lastDocker); } }, 400);
     });
   });
@@ -680,19 +1488,23 @@
   function renderDocker(data) {
     lastDocker = data;
     if (pressing) { return; }   // repainted on release with the latest data
+    reconcileIntent();
     var engine = $('engine');
     engine.className = data.state === 'ok' && data.engine ? 'up' : '';
     if (data.state === 'ok') { engine.textContent = data.engine ? 'En ejecución' : 'Detenido'; }
     else { engine.textContent = STATE_TEXT[data.state] || data.state; }
 
+    dockUIs = [];
+    if (detail) { renderDetail(); }
+
     var box = $('containers');
     box.className = data.state === 'ok' ? '' : data.state;
     box.textContent = '';
-    dockUIs = [];
     if (!data.items.length) {
       var msg = !data.engine && data.state === 'ok' ? 'Docker está detenido. Enciéndelo para ver los contenedores.'
               : data.state === 'ok' ? 'No hay contenedores.' : 'Sin datos de Docker.';
       box.appendChild(el('div', 'empty', msg));
+      updateButtonsEnabled();
       return;
     }
 
@@ -735,8 +1547,13 @@
     });
   }
 
+  // EventSource retries by itself after an error, but a connection that simply goes
+  // silent (the phone's radio napped, MIUI froze the WebView) raises none. So the page
+  // watches for silence and rebuilds the stream, and as a last resort reloads itself.
   function connect() {
-    var es = new EventSource('/api/stream');   // reconnects on its own using the server's retry
+    lastRestart = Date.now();
+    if (es) { try { es.close(); } catch (e) { /* already closed */ } }
+    es = new EventSource('/api/stream');   // reconnects on its own using the server's retry
     es.onopen = function () { connected = true; lastEvent = Date.now(); refreshStatus(); };
     es.onerror = function () { connected = false; refreshStatus(); };
     listen(es, 'hello', function (h) {
@@ -752,9 +1569,29 @@
     listen(es, 'sensors', renderSensors);
     listen(es, 'processes', renderProcesses);
     listen(es, 'docker', renderDocker);
+    listen(es, 'media', renderMedia);
+    listen(es, 'vm', renderVM);
     listen(es, 'ci', renderCI);
     listen(es, 'actions', renderActions);
   }
+
+  function watchdog() {
+    var now = Date.now();
+    if (connected && now - lastEvent <= SILENCE_MS) { deadSince = 0; return; }
+    if (!deadSince) { deadSince = now; }
+    if (now - lastRestart >= RESTART_MS) { lastRestart = now; connect(); }
+    if (now - deadSince >= RELOAD_AFTER_MS) {
+      var last = 0;
+      try { last = Number(sessionStorage.getItem(RELOAD_KEY)) || 0; } catch (e) { last = 0; }
+      if (now - last >= 60000) {
+        try { sessionStorage.setItem(RELOAD_KEY, String(now)); } catch (e) { /* not essential */ }
+        location.reload();
+      }
+    }
+  }
+  // Coming back to the page or the network returning are the moments it most often needs a fresh stream.
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) { lastRestart = 0; watchdog(); } });
+  window.addEventListener('online', function () { lastRestart = 0; connect(); });
 
   // ---- settings ----
 
@@ -771,6 +1608,7 @@
     $('token').value = '';
     $('cfg').className = '';
     updateButtonsEnabled();
+    if (detail) { fetchLogs(); }
   });
   $('clear').addEventListener('click', function () {
     setToken('');
@@ -780,7 +1618,13 @@
     toast('Token borrado');
   });
 
-  setInterval(refreshStatus, 1000);
+  setInterval(function () { refreshStatus(); paintMedia(); watchdog(); drawCharts(); }, 1000);
+  loadHist();
+  readChartWindow();
+  paintWindowSel();
+  buildCharts();
+  updateLegends();
+  drawCharts();
   refreshStatus();
   connect();
 })();
