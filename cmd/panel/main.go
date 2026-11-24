@@ -30,7 +30,8 @@ func main() {
 	configPath := flag.String("config", `C:\ProgramData\CalistoPanel\config.yaml`, "path to config.yaml")
 	flag.Parse()
 	if err := run(*configPath); err != nil {
-		fmt.Fprintln(os.Stderr, "panel:", err)
+		fmt.Fprintln(os.Stderr, "panel:", err) // visible with `go run`; the release build has no console
+		writeStartupError(startupLogDir(), err)
 		os.Exit(1)
 	}
 }
@@ -56,9 +57,19 @@ func run(configPath string) error {
 	defer stop()
 
 	var h *hub.Hub // set below; the executor only reports after the server starts
+	mediaSession := winutil.StartMedia(ctx)
+	mediaPoke := make(chan struct{}, 1)
 	exec := actions.New(ctx, cfg.Actions, actions.Deps{
 		Run:    winutil.Run,
 		Keys:   winutil.SendMediaKey,
+		Seek:   mediaSession.SeekBy,
+		Volume: mediaSession.SetVolume,
+		AfterMedia: func() {
+			select {
+			case mediaPoke <- struct{}{}:
+			default: // a re-read is already pending
+			}
+		},
 		Report: func(u hub.ActionUpdate) { h.UpdateAction(u) },
 		Log:    log,
 		// h is assigned just below, before the server can accept a request.
@@ -71,7 +82,7 @@ func run(configPath string) error {
 
 	srv := &http.Server{
 		Addr:    cfg.Server.Listen,
-		Handler: httpapi.New(cfg.Secrets.APIToken.Reveal(), web.Index, h.ServeStream, exec.Do, log),
+		Handler: httpapi.New(cfg.Secrets.APIToken.Reveal(), web.Index, h.ServeStream, exec.Do, newLogsFunc(h, winutil.CombinedOutput), h.MediaCover, log),
 		// No WriteTimeout: it would cut the long-lived SSE stream.
 		ReadHeaderTimeout: 5 * time.Second,
 	}
@@ -88,6 +99,16 @@ func run(configPath string) error {
 	start(func() { pollProcesses(ctx, cfg.Processes, os.Getenv("SystemRoot"), h, log) })
 	if cfg.Actions.Docker.Enabled {
 		start(func() { pollDocker(ctx, cfg.Containers, winutil.Output, h, log) })
+	}
+	if cfg.Actions.Media.Enabled {
+		start(func() {
+			pollMedia(ctx, cfg.Actions.Media, mediaSession.Read, mediaSession.Cover, mediaSession.Volume, mediaPoke, h, log)
+		})
+	}
+	if cfg.Actions.VMware.Enabled {
+		start(func() {
+			pollVM(ctx, cfg.VM, cfg.Actions.VMware, winutil.Output, winutil.Processes, fileExists, h, log)
+		})
 	}
 
 	serveErr := make(chan error, 1)
@@ -114,4 +135,9 @@ func run(configPath string) error {
 		return nil
 	}
 	return err
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
