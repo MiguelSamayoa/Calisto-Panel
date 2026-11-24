@@ -1,16 +1,16 @@
 // Package httpapi wires the public contract: GET routes are open, every POST needs
-// the bearer token. Rate limiting and per-action concurrency live in actions.Executor,
-// which already answers 409 and 429.
+// the bearer token, and so does the container log view (logs can hold secrets).
+// Per-action concurrency lives in actions.Executor, which answers 409.
 package httpapi
 
 import (
+	"context"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -19,26 +19,64 @@ import (
 
 const maxBody = 1 << 10 // POST has no meaningful body
 
+// ErrNotFound is what a LogsFunc returns for a project or container the server does
+// not know.
+var ErrNotFound = errors.New("not found")
+
+// Kinds of log target.
+const (
+	LogsProject   = "project"
+	LogsContainer = "container"
+)
+
+// LogsFunc returns the JSON body of the log view of one compose project or one
+// container (kind is LogsProject or LogsContainer; name is its name or short id).
+type LogsFunc func(ctx context.Context, kind, name string) ([]byte, error)
+
 type Server struct {
 	token  [sha256.Size]byte
 	index  []byte
 	stream http.Handler
 	do     func(id string) (actions.Started, error)
+	logs   LogsFunc
+	cover  func() []byte // encoded cover of the current track, nil when none
 	log    *slog.Logger
 }
 
 // New returns the router. token is the api_token; only its hash is kept. do is
 // normally (*actions.Executor).Do and stream is (*hub.Hub).ServeStream.
-func New(token string, index []byte, stream http.HandlerFunc, do func(string) (actions.Started, error), log *slog.Logger) http.Handler {
-	s := &Server{token: sha256.Sum256([]byte(token)), index: index, stream: stream, do: do, log: log}
+func New(token string, index []byte, stream http.HandlerFunc, do func(string) (actions.Started, error), logs LogsFunc, cover func() []byte, log *slog.Logger) http.Handler {
+	s := &Server{token: sha256.Sum256([]byte(token)), index: index, stream: stream, do: do, logs: logs, cover: cover, log: log}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", s.handleIndex)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 	})
-	mux.Handle("GET /api/stream", s.stream)
+	mux.Handle("GET /api/stream", s.logStream(s.stream))
+	mux.HandleFunc("GET /api/logs/container/{name}", s.handleLogs(LogsContainer))
+	mux.HandleFunc("GET /api/logs/{name}", s.handleLogs(LogsProject))
+	mux.HandleFunc("GET /api/media/cover", s.handleCover)
 	mux.HandleFunc("POST /api/do/{id}", s.handleDo)
 	return mux
+}
+
+// handleCover serves the cover of the current track. The page asks for it with
+// ?v=<cover id from the media event>, so a cached copy never outlives its track. No
+// auth, like the other read-only GETs.
+func (s *Server) handleCover(w http.ResponseWriter, _ *http.Request) {
+	var img []byte
+	if s.cover != nil {
+		img = s.cover()
+	}
+	if len(img) == 0 {
+		w.Header().Set("Cache-Control", "no-store")
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
+		return
+	}
+	w.Header().Set("Content-Type", http.DetectContentType(img))
+	w.Header().Set("Cache-Control", "private, max-age=300")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	_, _ = w.Write(img)
 }
 
 func (s *Server) handleIndex(w http.ResponseWriter, _ *http.Request) {
@@ -73,7 +111,6 @@ func (s *Server) handleDo(w http.ResponseWriter, r *http.Request) {
 
 	started, err := s.do(id)
 	var busy *actions.AlreadyRunningError
-	var limited *actions.RateLimitedError
 	switch {
 	case err == nil:
 		s.log.Info("action accepted", "remote", r.RemoteAddr, "action", id, "exec", started.Exec)
@@ -82,13 +119,49 @@ func (s *Server) handleDo(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "unknown_action"})
 	case errors.As(err, &busy):
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "already_running", "exec": busy.Exec})
-	case errors.As(err, &limited):
-		w.Header().Set("Retry-After", strconv.Itoa(int((limited.RetryAfter+time.Second-1)/time.Second)))
-		writeJSON(w, http.StatusTooManyRequests, map[string]any{"error": "rate_limited", "retryAfterMs": limited.RetryAfter.Milliseconds()})
 	default:
 		s.log.Error("action dispatch failed", "action", id, "err", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
 	}
+}
+
+// handleLogs serves the recent logs of a compose project (merged by time) or of one
+// container. Unlike the other GETs it needs the bearer token: container logs routinely
+// contain secrets.
+func (s *Server) handleLogs(kind string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		name := r.PathValue("name")
+		if !s.authorized(r) {
+			s.log.Warn("unauthorized logs request", "remote", r.RemoteAddr)
+			w.Header().Set("WWW-Authenticate", "Bearer")
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+			return
+		}
+		body, err := s.logs(r.Context(), kind, name)
+		switch {
+		case err == nil:
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Cache-Control", "no-store")
+			_, _ = w.Write(body)
+		case errors.Is(err, ErrNotFound):
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
+		default:
+			s.log.Error("reading logs", "kind", kind, "name", name, "err", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		}
+	}
+}
+
+// logStream records when each phone connection opens and closes and how long it lasted.
+// It is the evidence for telling a phone that dropped the connection (short, frequent
+// closes) from a server that never saw it again.
+func (s *Server) logStream(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		s.log.Info("stream opened", "remote", r.RemoteAddr)
+		next.ServeHTTP(w, r)
+		s.log.Info("stream closed", "remote", r.RemoteAddr, "duration", time.Since(start).Round(time.Second).String())
+	})
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
