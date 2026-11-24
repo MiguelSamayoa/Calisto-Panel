@@ -22,6 +22,7 @@ type Config struct {
 	// Processes and Containers are optional: absent sections take the defaults below.
 	Processes  Processes  `yaml:"processes"`
 	Containers Containers `yaml:"containers"`
+	VM         VM         `yaml:"vm"`
 	Secrets    Secrets    `yaml:"-"`
 }
 
@@ -42,7 +43,26 @@ type Containers struct {
 	TimeoutMs  int `yaml:"timeout_ms"`
 }
 
+// VM configures the VMware poller (state and host-side CPU/RAM of the configured VM).
+// It runs only when actions.vmware.enabled is true.
+type VM struct {
+	IntervalMs int `yaml:"interval_ms"`
+	TimeoutMs  int `yaml:"timeout_ms"`
+}
+
 func (c *Config) applyDefaults() {
+	if c.VM.IntervalMs == 0 {
+		c.VM.IntervalMs = 5000
+	}
+	if c.VM.TimeoutMs == 0 {
+		c.VM.TimeoutMs = 5000
+	}
+	if c.Actions.Media.PrevVK == 0 {
+		c.Actions.Media.PrevVK = 0xB1 // VK_MEDIA_PREV_TRACK
+	}
+	if c.Actions.Media.IntervalMs == 0 {
+		c.Actions.Media.IntervalMs = 2000
+	}
 	if c.Processes.IntervalMs == 0 {
 		c.Processes.IntervalMs = 5000
 	}
@@ -108,7 +128,9 @@ type Pipeline struct {
 }
 
 type Actions struct {
-	TimeoutMs       int      `yaml:"timeout_ms"`
+	TimeoutMs int `yaml:"timeout_ms"`
+	// RateLimitMs is deprecated and ignored: there is no global rate limit any more
+	// (see ARCHITECTURE §4). It stays so an existing config.yaml still loads.
 	RateLimitMs     int      `yaml:"rate_limit_ms"`
 	ConfirmRequired []string `yaml:"confirm_required"`
 	Docker          Docker   `yaml:"docker"`
@@ -131,6 +153,8 @@ type Media struct {
 	Enabled     bool  `yaml:"enabled"`
 	PlayPauseVK uint8 `yaml:"playpause_vk"`
 	NextVK      uint8 `yaml:"next_vk"`
+	PrevVK      uint8 `yaml:"prev_vk"`     // optional, default VK_MEDIA_PREV_TRACK
+	IntervalMs  int   `yaml:"interval_ms"` // now-playing poll, default 2000
 }
 
 // Secrets never leave the server. Both fields redact themselves when formatted or
@@ -193,21 +217,23 @@ func (c *Config) validate() error {
 		bad("server.listen: port %q out of range", port)
 	}
 	for name, v := range map[string]int{
-		"server.stale_ms":         c.Server.StaleMs,
-		"server.sse_keepalive_ms": c.Server.SSEKeepaliveMs,
-		"log.max_size_mb":         c.Log.MaxSizeMB,
-		"log.max_backups":         c.Log.MaxBackups,
-		"sensors.interval_ms":     c.Sensors.IntervalMs,
-		"sensors.timeout_ms":      c.Sensors.TimeoutMs,
-		"ci.interval_ms":          c.CI.IntervalMs,
-		"ci.timeout_ms":           c.CI.TimeoutMs,
-		"ci.error_backoff_max_ms": c.CI.ErrorBackoffMaxMs,
-		"actions.timeout_ms":      c.Actions.TimeoutMs,
-		"actions.rate_limit_ms":   c.Actions.RateLimitMs,
-		"processes.interval_ms":   c.Processes.IntervalMs,
-		"processes.top_n":         c.Processes.TopN,
-		"containers.interval_ms":  c.Containers.IntervalMs,
-		"containers.timeout_ms":   c.Containers.TimeoutMs,
+		"server.stale_ms":           c.Server.StaleMs,
+		"server.sse_keepalive_ms":   c.Server.SSEKeepaliveMs,
+		"log.max_size_mb":           c.Log.MaxSizeMB,
+		"log.max_backups":           c.Log.MaxBackups,
+		"sensors.interval_ms":       c.Sensors.IntervalMs,
+		"sensors.timeout_ms":        c.Sensors.TimeoutMs,
+		"ci.interval_ms":            c.CI.IntervalMs,
+		"ci.timeout_ms":             c.CI.TimeoutMs,
+		"ci.error_backoff_max_ms":   c.CI.ErrorBackoffMaxMs,
+		"actions.timeout_ms":        c.Actions.TimeoutMs,
+		"vm.interval_ms":            c.VM.IntervalMs,
+		"vm.timeout_ms":             c.VM.TimeoutMs,
+		"actions.media.interval_ms": c.Actions.Media.IntervalMs,
+		"processes.interval_ms":     c.Processes.IntervalMs,
+		"processes.top_n":           c.Processes.TopN,
+		"containers.interval_ms":    c.Containers.IntervalMs,
+		"containers.timeout_ms":     c.Containers.TimeoutMs,
 	} {
 		if v <= 0 {
 			bad("%s must be positive", name)

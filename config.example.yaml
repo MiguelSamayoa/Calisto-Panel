@@ -50,6 +50,11 @@ sensors:
       label: "Red"
       # El GUID del adaptador es de cada máquina; "Download Speed" es throughput/8.
       sensor_id: "/nic/%7BGUID%7D/throughput/8" # REEMPLAZAR
+    - id: "net.up"
+      label: "Red subida"
+      # Mismo adaptador, "Upload Speed" = throughput/7. Opcional: sin él la gráfica de red
+      # muestra solo la bajada.
+      sensor_id: "/nic/%7BGUID%7D/throughput/7" # REEMPLAZAR
 
 # ---------------------------------------------------------------------------
 # Apps que más consumen (panel Sistema)
@@ -73,6 +78,15 @@ processes:
 containers:
   interval_ms: 5000
   timeout_ms: 8000
+
+# ---------------------------------------------------------------------------
+# Máquina virtual (panel Pipelines)
+# ---------------------------------------------------------------------------
+# Solo se sondea si actions.vmware.enabled es true. Lee `vmrun list` (solo lectura) para
+# saber si la VM corre, y la CPU/RAM del proceso vmware-vmx. Opcional.
+vm:
+  interval_ms: 5000
+  timeout_ms: 5000
 
 # ---------------------------------------------------------------------------
 # Integración continua
@@ -103,10 +117,12 @@ ci:
 # en el argv. Ver D-16 y ARCHITECTURE §4.
 actions:
   timeout_ms: 60000
+  # Obsoleto: ya no hay límite de frecuencia global (ver ARCHITECTURE §4). Se acepta y
+  # se ignora para que una configuración antigua siga cargando.
   rate_limit_ms: 2000
   confirm_required:
     - "docker.stop"
-    - "vm.suspend"
+    - "vm.stop"            # apagar la VM (con Docker habilitado o no, VMware lo añade siempre)
     - "container.stop"     # cubre container.stop.<id> de cualquier contenedor
     - "project.stop"       # cubre project.stop.<nombre> (con Docker habilitado se exigen aunque falten aquí)
 
@@ -123,7 +139,7 @@ actions:
     #   Get-ChildItem "C:\Program Files*\VMware\VMware Workstation\vmrun.exe"
     vmrun_path: "C:\\Program Files (x86)\\VMware\\VMware Workstation\\vmrun.exe"
     # Solo el .vmx. El .vmxf no es argumento válido para vmrun.
-    # suspend soft requiere VMware Tools en el huésped.
+    # stop soft (apagado ordenado) requiere VMware Tools en el huésped.
     vmx: "C:\\Users\\USUARIO\\Documents\\Virtual Machines\\MI_VM\\MI_VM.vmx"
 
   media:
@@ -132,6 +148,10 @@ actions:
     # corra en la sesión interactiva del usuario, no como servicio. Ver D-09.
     playpause_vk: 0xB3   # VK_MEDIA_PLAY_PAUSE
     next_vk: 0xB0        # VK_MEDIA_NEXT_TRACK
+    prev_vk: 0xB1        # VK_MEDIA_PREV_TRACK (opcional, este es el valor por defecto)
+    # Cada cuánto se lee qué suena (SMTC), para la tarjeta "Reproduciendo" y el icono de
+    # play/pausa. Opcional. Tras cada botón de medios se relee al instante.
+    interval_ms: 2000
 
 # ---------------------------------------------------------------------------
 # secrets.yaml — archivo aparte, NUNCA al repositorio

@@ -148,3 +148,23 @@ func TestOptionalSectionsOverride(t *testing.T) {
 		t.Errorf("containers = %+v", cfg.Containers)
 	}
 }
+
+func TestMediaAndVMDefaultsAndDeprecatedRateLimit(t *testing.T) {
+	// baseYAML still carries rate_limit_ms: 2000, which is accepted and ignored.
+	cfg, err := Load(write(t, noPipelines, tokenOnly, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m := cfg.Actions.Media; m.PrevVK != 0xB1 || m.IntervalMs != 2000 {
+		t.Errorf("media defaults = %+v", m)
+	}
+	if cfg.VM.IntervalMs != 5000 || cfg.VM.TimeoutMs != 5000 {
+		t.Errorf("vm defaults = %+v", cfg.VM)
+	}
+	cfg, err = Load(write(t, noPipelines, tokenOnly, func(s string) string {
+		return strings.Replace(s, "  rate_limit_ms: 2000\n", "", 1)
+	}))
+	if err != nil {
+		t.Errorf("a config without rate_limit_ms must load: %v", err)
+	}
+}
