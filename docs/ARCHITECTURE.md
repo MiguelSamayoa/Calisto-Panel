@@ -15,7 +15,8 @@ diarias están en `CLAUDE.md`.
 | `panel.exe` | propio | usuario normal | sondear, mantener estado, servir SSE, ejecutar acciones |
 | Docker Desktop CLI | externo | usuario normal | `docker desktop start|stop|status`; `docker ps -a`, `docker stats --no-stream`, `docker start|stop <id>` |
 | API de procesos de Windows | API | usuario normal | CPU y memoria por proceso (`internal/winutil`) |
-| `vmrun.exe` | externo | usuario normal | `start nogui`, `suspend soft` |
+| `vmrun.exe` | externo | usuario normal | `start nogui`, `stop soft`, `list` (solo lectura) |
+| Sesión de medios de Windows (SMTC) | API WinRT | usuario normal, sesión interactiva | título, artista, posición y estado de lo que suena; saltar ±10 s |
 | Windows SendInput | API | usuario normal, sesión interactiva | teclas de medios |
 | Fully Kiosk Browser | Android | — | renderizar y disparar acciones |
 
@@ -69,6 +70,8 @@ Reglas del store:
 |---|---|---|---|
 | LHM | 5 s | 2 s | log en nivel `warn`, reintento al siguiente tick; sin backoff (es local y barato) |
 | Azure DevOps | 60 s o 150 s | 10 s | backoff exponencial hasta 5 min; se restablece al primer éxito |
+| Medios (SMTC) | 2 s (+ re-lectura tras cada acción) | 3 s | `state:"error"` conservando los últimos datos; sin backoff |
+| VM (`vmrun list`) | 5 s | 5 s | `state:"error"`; sin backoff (es local) |
 | Procesos | 5 s | — | se conserva la última lista y el dominio pasa a `error`; sin backoff (es local) |
 | Docker | 5 s | 8 s | `docker ps` fallido = motor apagado (`engine:false`, no es un error); sin backoff |
 | Acción | — | 60 s | se marca `failed` con el mensaje de error |
@@ -99,7 +102,7 @@ Fully Kiosk cortan conexiones ociosas; sin esto el panel se congela en silencio.
 
 ```
 event: hello
-data: {"server":"calisto-panel/0.1.0","sensorsIntervalMs":5000,"ciIntervalMs":60000,"staleMs":10000,"deadMs":60000,"actions":["docker.start","docker.stop","vm.suspend","vm.start","media.playpause","media.next"],"dynamicActions":["container.start","container.stop","project.start","project.stop"],"processesIntervalMs":5000,"processesTopN":5,"confirmRequired":["docker.stop","vm.suspend","container.stop","project.stop"]}
+data: {"server":"calisto-panel/0.1.0","sensorsIntervalMs":5000,"ciIntervalMs":60000,"staleMs":10000,"deadMs":60000,"actions":["docker.start","docker.stop","vm.stop","vm.start","media.playpause","media.prev","media.next","media.seek_back","media.seek_fwd"],"dynamicActions":["container.start","container.stop","project.start","project.stop"],"processesIntervalMs":5000,"processesTopN":5,"confirmRequired":["docker.stop","vm.suspend","container.stop","project.stop"]}
 ```
 
 El cliente construye los botones y las reglas de confirmación a partir de este evento.
@@ -150,8 +153,9 @@ data: {"ts":"2026-11-23T08:14:05-06:00","state":"ok","memTotal":25553551360,"ite
 - El servidor envía la unión del top `top_n` por CPU y el top `top_n` por memoria,
   ordenada por CPU; el cliente arma las dos columnas.
 - `memTotal` son los bytes de memoria física instalada, para que el cliente calcule la
-  cuota de cada app. El umbral de presentación (solo apps con más del 10 % de CPU o de
-  RAM) es del cliente: el servidor no filtra por él.
+  cuota de cada app. Los umbrales de presentación (piso de ruido del 1 % de CPU y 2 % de
+  RAM, rojo desde el 10 %) y el promedio de las últimas 3 lecturas son del cliente: el
+  servidor no filtra ni promedia.
 - `state` es del dominio. Con `error` la lista es la última buena.
 
 ### Evento `docker`
@@ -176,6 +180,47 @@ data: {"ts":"...","state":"ok","engine":true,"items":[
 - `cpu`, `mem`, `memLimit` y `pids` son `null` en contenedores detenidos o si
   `docker stats` falló en esa ronda. `cpu` es un porcentaje; `mem` y `memLimit`, bytes.
 
+### Evento `media`
+
+```
+event: media
+data: {"ts":"...","state":"ok","active":true,"status":"playing","app":"Spotify.exe","title":"Song","artist":"Band","album":"","position":84.2,"duration":201.0,"volume":42,"cover":"3fa9c01b22de"}
+```
+
+- Es la sesión de medios actual de Windows (SMTC, la misma que usa el control de volumen):
+  la app que Windows considera "en reproducción", sea Spotify, Chrome o el reproductor
+  que sea. `active:false` si no hay ninguna.
+- `status` es `playing | paused | stopped | other`. `position` y `duration` son segundos
+  crudos; `duration` es 0 si la fuente no la informa (directos). La posición llega
+  extrapolada al instante del sondeo; entre eventos el cliente la sigue avanzando él
+  mismo mientras `status` sea `playing`.
+- `cover` es el id corto (hash) de la portada de la pista, o `""` si no hay. Cambia cuando
+  cambia la imagen. El cliente pide la imagen a `GET /api/media/cover?v=<cover>` (sin auth,
+  como el resto de GET de solo lectura; 404 si no hay) y muestra un esqueleto mientras no
+  haya imagen. El servidor la lee de SMTC una vez por pista (hasta 5 reintentos, porque la
+  fuente suele publicarla después del título), la guarda solo en memoria (máx. 2 MiB) y no
+  escribe nada a disco.
+- Un objeto en el sobre, no una lista. Con un fallo de lectura, `state:"error"` y se
+  conservan los últimos datos.
+- Cadencia de 2 s. Tras cada acción de medios que funcionó se vuelve a leer a los ~0,25 s
+  y ~0,7 s, para que el icono de play/pausa y la tarjeta cambien al instante. Solo existe
+  si `actions.media.enabled` es `true`.
+
+### Evento `vm`
+
+```
+event: vm
+data: {"ts":"...","state":"ok","name":"MI_VM","vm":"running","cpu":0.6,"mem":316252160,"running":1}
+```
+
+- `name` es el `.vmx` configurado sin extensión. `vm` es `running | suspended | off`:
+  `running` si `vmrun list` lo nombra, `suspended` si no y existe su `.vmss`, `off` en
+  otro caso. No confundir con `state`, que es la salud del dato.
+- `cpu` (porcentaje de la CPU del host) y `mem` (bytes de memoria privada) salen del
+  proceso `vmware-vmx.exe`; son 0 si la VM no corre. Con varias VMs encendidas los números
+  suman todas, y `running` dice cuántas hay.
+- Cadencia de 5 s; solo existe si `actions.vmware.enabled` es `true`.
+
 ### Evento `ci`
 
 ```
@@ -197,6 +242,20 @@ que falló. Un PAT caducado es `state:"auth", result:null` — no hay dato. Cola
 ejes en un campo haría indistinguible "falló el build" de "falló el panel", que es
 exactamente el error que este diseño evita.
 
+### Vigilancia de la conexión (cliente) y registro de conexiones (servidor)
+
+`EventSource` reconecta solo tras un error, pero una conexión que **se queda en silencio**
+sin error (la radio del teléfono se durmió, MIUI congeló el WebView) no lanza ninguno.
+Por eso la página vigila el silencio: sin ningún evento en 20 s reconstruye el stream (como
+mucho cada 10 s), y si pasan 45 s sin recuperarse recarga la página entera (como mucho una
+vez por minuto). También reconstruye el stream al volver a primer plano y al volver la red.
+
+El servidor registra cada conexión del stream: `stream opened` y `stream closed` con la
+dirección remota y la duración. Cortes frecuentes y cortos desde la IP del teléfono
+apuntan a que el teléfono suelta la conexión; ausencia total de `stream opened` tras una
+caída, a que el teléfono ni siquiera intenta reconectar (proceso muerto o pantalla en
+suspensión).
+
 ### Evento `actions`
 
 ```
@@ -213,6 +272,33 @@ terminar y luego se descartan.
 
 ---
 
+### Logs de un proyecto o de un contenedor
+
+```
+GET /api/logs/{proyecto}
+GET /api/logs/container/{id}
+Authorization: Bearer <api_token>
+```
+
+Devuelven `{"kind":"project|container","name":"...","containers":[{"id","name","state"}],"lines":[{"t","c","m"}]}`:
+las últimas 400 líneas de **todos** los contenedores del proyecto (mezcladas por hora), o
+las del contenedor indicado.
+`t` son milisegundos Unix, `c` el ID del contenedor y `m` el texto (sin códigos de color
+ANSI, recortado a 2000 caracteres). El cliente lo sondea cada 3 s mientras la vista de
+detalle está abierta.
+
+- **Exige el bearer**, a diferencia del resto de los `GET`: los logs suelen contener
+  secretos (cadenas de conexión, tokens, datos de usuarios). `401` sin él. El token solo
+  va en el encabezado, nunca en la URL.
+- `{proyecto}` debe cumplir `[a-z0-9][a-z0-9_-]{0,62}` y ser un proyecto que el servidor
+  listó en su último sondeo; `{id}` debe ser 12 dígitos hexadecimales y un contenedor que
+  también listó. Si no, `404 not_found` y no se ejecuta nada.
+- Se ejecuta `docker logs --tail 200 --timestamps <id>` con argv fijo, uno por contenedor
+  (máximo 12), con los IDs que el hub mismo obtuvo. Las llamadas se serializan y el
+  conjunto tiene un timeout de 6 s. Un contenedor que falla no hunde la respuesta.
+- El texto de los logs lo controla quien escribe en el contenedor: el cliente lo pinta
+  siempre como nodo de texto, nunca como HTML.
+
 ## 4. Contrato de acciones
 
 ```
@@ -223,10 +309,23 @@ Authorization: Bearer <api_token>
 Sin cuerpo. El `actionId` debe pertenecer a la lista blanca o a una de sus dos familias
 con sufijo (ver "Acciones por contenedor" y "Acciones por proyecto" más abajo).
 
-Orden de validación, fijo: **401 → 404 → 409 → 429**. La autenticación va primero para que
-un cliente sin token no pueda sondear qué IDs existen. El `409` va antes que el `429` para
-que un doble toque sobre una acción en curso informe `already_running` y no consuma la
-ventana de frecuencia.
+Orden de validación, fijo: **401 → 404 → 409**. La autenticación va primero para que un
+cliente sin token no pueda sondear qué IDs existen.
+
+**No hay límite de frecuencia global.** Antes había uno (1 acción cada 2 s y el `429`);
+se quitó porque bloqueaba las acciones de medios, que deben poder repetirse al instante.
+Lo que queda:
+
+- Una ejecución concurrente por ID de acción: el mismo ID otra vez mientras corre da `409`.
+- Las acciones `media.*` son instantáneas: no esperan, nunca dan `409` y un fallo es lo
+  único que se reporta.
+- Evitar el doble disparo de un par encender/apagar es de la **interfaz**: al pulsar
+  "encender" ese botón se bloquea y "apagar" se desbloquea al instante, aunque la acción
+  siga corriendo (levantar Docker tarda). Mientras no se pulsa nada, el bloqueo sigue lo
+  que se observa (Docker encendido bloquea "encender"). Si la acción falla, se desbloquea;
+  si termina bien pero lo observado no cambia en 8 s, también.
+- `rate_limit_ms` de `config.yaml` está obsoleto: se acepta y se ignora, para que una
+  configuración antigua siga cargando.
 
 | Código | Cuerpo | Cuándo |
 |---|---|---|
@@ -234,7 +333,6 @@ ventana de frecuencia.
 | `401` | `{"error":"unauthorized"}` | token ausente o incorrecto |
 | `404` | `{"error":"unknown_action"}` | ID fuera de la lista blanca |
 | `409` | `{"error":"already_running","exec":"01JF3K8S2M"}` | ya hay una ejecución de ese mismo ID |
-| `429` | `{"error":"rate_limited","retryAfterMs":2000}` | más de una acción cada 2 s en total |
 
 Ejecución **asíncrona**: el `POST` responde de inmediato. `docker desktop stop` tarda
 decenas de segundos y bloquear la petición dejaría el panel aparentemente colgado.
@@ -244,8 +342,8 @@ Detalles de la implementación (`internal/actions`):
 - Solo se registran las acciones de los grupos con `enabled: true`; las demás responden
   `404 unknown_action`. La lista del evento `hello` sale del mismo registro.
 - El ID `exec` son 10 caracteres Crockford base32 con los milisegundos de inicio (la mitad
-  de tiempo de un ULID): ordenable, y único porque los inicios están limitados a uno cada 2 s.
-- Una petición rechazada (404, 409 o 429) no consume la ventana de frecuencia.
+  de tiempo de un ULID): ordenable, y único porque el ejecutor reparte milisegundos
+  estrictamente crecientes aunque dos acciones empiecen en el mismo.
 - Al cancelarse el contexto de `main`, las acciones en curso se matan y se reportan
   `failed`; `Executor.Wait()` espera a que todas reporten antes de salir.
 - El mensaje de un fallo es el error del proceso (`running docker: exit status 1`),
@@ -263,9 +361,15 @@ El `actionId` se resuelve contra `config.yaml` y produce un `argv` fijo:
 | `docker.start` | `docker desktop start` |
 | `docker.stop` | `docker desktop stop` |
 | `vm.start` | `<vmrun_path> -T ws start <vmx> nogui` |
-| `vm.suspend` | `<vmrun_path> -T ws suspend <vmx> soft` |
+| `vm.stop` | `<vmrun_path> -T ws stop <vmx> soft` (apagado ordenado del invitado; requiere VMware Tools) |
 | `media.playpause` | `SendInput` con `VK_MEDIA_PLAY_PAUSE` (`0xB3`) |
+| `media.prev` | `SendInput` con `VK_MEDIA_PREV_TRACK` (`0xB1`, configurable con `prev_vk`) |
 | `media.next` | `SendInput` con `VK_MEDIA_NEXT_TRACK` (`0xB0`) |
+| `media.seek_back` | SMTC `TryChangePlaybackPositionAsync(posición − 10 s)`, acotado al inicio de la pista |
+| `media.seek_fwd` | SMTC `TryChangePlaybackPositionAsync(posición + 10 s)`, acotado al final de la pista |
+
+No existe una tecla de medios global para saltar 10 s, por eso el avance y el retroceso
+van por SMTC. Fallan con un mensaje claro si no hay sesión o la fuente no deja buscar.
 
 Ningún valor del cliente entra en el `argv`. El cliente solo elige una fila de esa tabla
 (salvo las dos familias de contenedor, que siguen).
@@ -289,6 +393,20 @@ Es la única excepción a "lista cerrada de IDs", y está acotada así:
 4. El `argv` se arma en `internal/actions`; el ID validado es su único elemento variable.
 5. Solo existe con `actions.docker.enabled: true`.
 
+### Volumen (`media.volume.<n>`)
+
+`media.volume.<n>` fija el volumen maestro del dispositivo de reproducción predeterminado
+(Core Audio, `IAudioEndpointVolume.SetMasterVolumeLevelScalar`, llamado a mano como SMTC,
+sin dependencias). Es la segunda excepción a la lista cerrada (D-34) y se acota así:
+
+1. `<n>` es la forma canónica de un entero de 0 a 100: de uno a tres dígitos, sin signo, sin
+   espacios y sin ceros a la izquierda (`007`, `101`, `-1`, `5x` → `404 unknown_action`).
+2. No hay `argv` ni proceso: el entero validado solo llega a la llamada de Core Audio.
+3. Es una acción de medios: instantánea, nunca `409`, sin entrada en `actions` si funciona.
+4. Solo existe con `actions.media.enabled: true`. Exige bearer como todo `POST`.
+
+El evento `media` trae `volume` (porcentaje 0-100, `-1` si no se pudo leer) en cada sondeo.
+
 ### Acciones por proyecto
 
 | actionId | argv resultante |
@@ -304,8 +422,7 @@ desconocido, responde `404 unknown_action`. `docker stop` detiene los contenedor
 tras otro (hasta 10 s de gracia cada uno): un proyecto con muchos puede acercarse al
 timeout de 60 s, en cuyo caso se reporta `timeout` aunque Docker siga deteniéndolos.
 
-Heredan el resto del contrato: bearer obligatorio, límite global de 1 acción cada 2 s,
-una ejecución concurrente por ID completo (por eso el `409` es por contenedor), timeout
+Heredan el resto del contrato: bearer obligatorio, una ejecución concurrente por ID completo (por eso el `409` es por contenedor), timeout
 de 60 s y entrada en el evento `actions` con el ID completo. `container.stop` y
 `project.stop` figuran siempre en `confirmRequired`, así que el cliente exige doble toque.
 
@@ -463,7 +580,8 @@ CI se desactiva: no se lanza el sondeo, el evento `ci` emite `items: []` y
 `azure_devops_pat` no es obligatorio; con al menos un pipeline el PAT sí lo es. Un fallo de validación **sí** aborta el
 arranque: es un error del operador, no una degradación en tiempo de ejecución.
 
-Las secciones `processes` y `containers` son opcionales: sin ellas rigen los valores por
+Las secciones `processes`, `containers` y `vm`, y los campos `actions.media.prev_vk` y
+`actions.media.interval_ms`, son opcionales: sin ellas rigen los valores por
 defecto de `config.example.yaml` (5 s, `top_n: 5`, `include_unreadable: [vmmem, vmmemWSL]`,
 timeout de Docker 8 s). Así una configuración anterior sigue cargando.
 
@@ -475,7 +593,7 @@ días: el panel no es una fuente de auditoría, y 25 MB cubren de sobra el tiemp
 un diagnóstico.
 
 Toda ejecución de acción se registra con marca de tiempo, `actionId`, `exec`, resultado y
-duración. Cuando un botón suspenda una VM que no debía, el log es lo que lo explica.
+duración. Cuando un botón apague una VM que no debía, el log es lo que lo explica.
 
 ---
 
@@ -502,7 +620,12 @@ Consecuencias aceptadas:
    en la LAN. Se mitiga dedicándolo: sin cuentas, sin navegación.
 5. Cualquiera en la LAN lee por `GET` los nombres de contenedores, imágenes y puertos, y
    los nombres de las apps que consumen más. Misma lógica que el punto 1.
-6. Con el token se puede encender o apagar cualquier contenedor que Docker liste, no solo
+6. Los logs de contenedores pueden contener secretos. Por eso `GET /api/logs/{proyecto}` es
+   la única lectura que exige el bearer (§3). Quien tenga el token del teléfono los lee;
+   quien solo está en la LAN no. La tarjeta de "reproduciendo" sí es pública como el resto
+   de los `GET`: muestra el título de lo que suena en el PC, lo que cualquiera en la LAN ya
+   podría oír.
+7. Con el token se puede encender o apagar cualquier contenedor que Docker liste, no solo
    los "del panel". Es reversible (`docker start`), pero puede cortar un servicio que
    alguien use. Por eso `container.stop` exige doble toque. Nombres de contenedor, imagen
    y puertos son texto controlado por quien crea el contenedor: el cliente los pinta
@@ -530,21 +653,24 @@ Consecuencias aceptadas:
 | D-14 | Token introducido a mano una vez → `localStorage` | token en la URL de arranque de Fully Kiosk; QR | Un token en query string termina en historial, logs y encabezados `Referer` |
 | D-15 | Sin TLS en la v1 | certificado autofirmado; mTLS | Un autofirmado produce advertencias permanentes en el WebView y no aporta nada frente al modelo de amenaza de §8 |
 | D-16 | Lista blanca cerrada de 6 acciones, argv fijo (ampliada por D-31 con dos familias de contenedor) | endpoint genérico de comandos | Un endpoint que ejecuta lo que le manden es exactamente el agujero que este diseño evita, incluso con token |
-| D-17 | `vmrun suspend ... soft`, nunca `stop hard` | apagado forzado | Un toque accidental en una pantalla siempre encendida al borde del escritorio no debe destruir trabajo sin guardar |
-| D-18 | Doble confirmación en `docker.stop` y `vm.suspend`, en el cliente | confirmación en el protocolo; sin confirmación | Es una preocupación de interfaz. Un parámetro `confirm` en la API da falsa seguridad: cualquiera con el token lo envía igual |
+| D-17 | `vmrun stop ... soft` (antes `suspend soft`), nunca `stop hard` | apagado forzado; suspender | Un toque accidental en una pantalla siempre encendida al borde del escritorio no debe destruir trabajo sin guardar |
+| D-18 | Doble confirmación en `docker.stop` y `vm.stop`, en el cliente | confirmación en el protocolo; sin confirmación | Es una preocupación de interfaz. Un parámetro `confirm` en la API da falsa seguridad: cualquiera con el token lo envía igual |
 | D-19 | Ejecución asíncrona con `exec` id | `POST` síncrono | `docker desktop stop` tarda decenas de segundos; bloquear dejaría el panel aparentemente colgado |
 | D-20 | `sensor_id` explícitos + validación con degradación por tile | heurística por nombre de sensor | La heurística falla en silencio con valores equivocados. Los IDs explícitos fallan de forma visible y señalan qué re-mapear |
 | D-21 | Umbrales `stale` 10 s / `dead` 60 s, con antigüedad visible | ocultar datos viejos; mostrarlos sin marca | Un dashboard que muestra datos viejos como si fueran actuales es peor que uno apagado |
 | D-22 | Página de respaldo local en el teléfono cuando el PC está apagado | pantalla de error del navegador | Sin SIM, si el Wi-Fi o el PC caen el panel queda ciego; la página de error del navegador no comunica nada útil |
 | D-23 | Host único, sin prefijos multi-host | `/api/hosts/{id}/...` desde el inicio | El día que haya varios PCs el problema real es descubrimiento y agregación, no la forma de la ruta. Un prefijo vacío hoy no lo ahorra |
-| D-24 | Sin históricos ni base de datos | SQLite; Prometheus | El panel responde "¿cómo está ahora?". Las series temporales son otro producto |
+| D-24 | Sin históricos ni base de datos **en el PC** | SQLite; Prometheus | El panel responde "¿cómo está ahora?". Las series temporales son otro producto. Excepción acotada en D-33 |
 | D-25 | GitHub Actions detrás de `CIProvider`, sin implementar | ambos proveedores en la v1 | Presupuesto de 10 h. La interfaz deja el hueco sin costo |
-| D-26 | Metadatos de música aplazados a v2 | SMTC en la v1 | Leer título y artista exige la API `GlobalSystemMediaTransportControlsSession` (disponible desde Windows 10 1809) a través de un ayudante en .NET, porque no hay enlace directo cómodo desde Go. Es el 20 % del valor y el 40 % del esfuerzo. Las acciones de play/pausa y siguiente sí van en la v1, por teclas de medios |
+| D-26 | Metadatos de música, estado de reproducción y ±10 s vía SMTC con llamadas WinRT directas desde Go (reemplaza el aplazamiento a v2) | ayudante en .NET; PowerShell; dependencia `winrt-go`; teclas de medios solamente | Lo piden el icono dinámico de play/pausa, la tarjeta de "reproduciendo" y el salto de 10 s, y los tres necesitan SMTC. Se resolvió sin cgo ni módulos nuevos: `internal/winutil/media_session_windows.go` activa `GlobalSystemMediaTransportControlsSessionManager` con `RoGetActivationFactory` y llama a su vtable a mano. Los IIDs y posiciones de vtable salen de `Windows.Media.Control.winmd` y se comprobaron contra la máquina real. Un ayudante externo habría roto la regla de argv fijo o añadido un proceso residente |
 | D-27 | `docker desktop status` con cadena de coincidencia configurable | parseo fijo de la salida | La cadena varía entre versiones de Docker Desktop. Un valor en configuración se corrige sin recompilar |
 | D-28 | Secretos en `secrets.yaml` aparte, con ACL restringida | todo en `config.yaml`; variables de entorno | Permite versionar `config.example.yaml` completo sin riesgo, y acotar permisos al único archivo que los necesita |
 | D-29 | Tres documentos en vez de cinco | README + GUIA_USUARIO + CLAUDE + ARCHITECTURE + DECISIONS | Para ~1.500 líneas de Go, cinco documentos se desincronizan antes de terminar la v1. El registro de decisiones vive aquí como §9, no como archivo huérfano |
 | D-30 | Paneles `processes` y `docker` como dominios SSE propios, de lista dinámica y con salud por dominio | ampliar `sensors`; un snapshot único | Cambian de tamaño en cada sondeo, así que no caben en los ítems fijos de `sensors`; y `docker stats` tarda 1-2 s, no debe frenar los sensores. CPU y RAM por proceso salen de la API de Windows con `golang.org/x/sys/windows` (ya permitida): LHM no los da. Se agrupa por ejecutable porque un navegador son decenas de procesos |
 | D-31 | Acciones por contenedor (`container.*.<id>`) y por proyecto de Compose (`project.*.<nombre>`), validadas contra la lista que el servidor observó | lista cerrada sin contenedores; nombres en el argv; endpoint con el ID libre | El usuario quiere encender y apagar contenedores individuales desde el panel. Esto exige que el cliente envíe un identificador, lo que choca con la regla 3 de `CLAUDE.md`. Se resuelve sin abrir un canal de comandos: verbo de dos literales, ID de exactamente 12 hex (no puede ser una opción), y solo contenedores que el propio servidor listó. Las acciones por proyecto (Docker Desktop muestra los proyectos de Compose como un padre) no ponen el nombre en el `argv`: lo usan para buscar los IDs que el servidor ya conoce. Ver §4 |
+| D-32 | Sin límite de frecuencia global; bloqueo de pares encender/apagar en la interfaz; acciones de medios instantáneas | mantener 1 acción cada 2 s; límite solo para las no-medios | El límite de 2 s impedía repetir ±10 s o siguiente, y no resolvía lo que de verdad molestaba (pulsar dos veces "encender"). El `409` por ID ya impide dos ejecuciones simultáneas de lo mismo, y la interfaz bloquea el botón pulsado y libera el contrario al instante. Riesgo aceptado: se puede pulsar "apagar" mientras "encender" aún corre (Docker tarda); lo decide el usuario, no el servidor |
+| D-33 | Gráficas de 1 y 5 min con el historial **en el cliente** (memoria de la página + copia en `localStorage` cada 15 s) | historial en el servidor; base de datos; sin gráficas | El usuario pidió gráficas de CPU, RAM, temperaturas y red con ventana de 1 o 5 min. Un buffer de 6 min son ~70 puntos por sensor: cabe en el teléfono, y guardarlo allí respeta D-24 (el PC sigue sin almacenar nada) y la regla de no unir dominios. Se pierde si se borran los datos del navegador del teléfono, y una caída de red deja un hueco (la línea se corta, no se interpola). RAM se grafica como % de la memoria instalada (`memTotal` del evento `processes`) para compartir el eje 0-100 con la CPU. Rangos, colores y niveles de peligro son de presentación y viven en `web/index.html` |
+| D-34 | Volumen con barra arrastrable: `media.volume.<0-100>` + lectura en el evento `media` | solo teclas de volumen (±2 %); endpoint con valor libre | El usuario quiere una barra. Fijar un nivel exacto exige que el cliente envíe un número, lo que choca con la regla 3. Se acota como D-31: el entero tiene forma canónica 0-100, no entra a ningún `argv` y solo alimenta `SetMasterVolumeLevelScalar`. El nivel real se publica en el evento `media` para que la barra siga a los cambios hechos en el PC |
 
 ---
 
@@ -552,9 +678,8 @@ Consecuencias aceptadas:
 
 | Tema | Condición para abordarlo |
 |---|---|
-| Metadatos de música vía SMTC | la v1 lleva un mes estable |
 | GitHub Actions | existe un pipeline real en GitHub que el usuario necesite vigilar |
 | Acceso fuera de la LAN | Tailscale o WireGuard, nunca port forwarding; antes hay que comprobar que no choque con el cliente VPN de trabajo por tabla de rutas y DNS |
 | TLS | solo si el modelo de amenaza de §8 cambia |
 | Multi-host | cuando exista un segundo PC que lo justifique; implica descubrimiento y agregación, no solo cambiar rutas |
-| Históricos | producto distinto; la respuesta probable es Grafana + Prometheus, no este binario |
+| Históricos de más de 5 minutos | producto distinto; la respuesta probable es Grafana + Prometheus, no este binario |

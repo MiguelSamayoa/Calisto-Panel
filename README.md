@@ -43,7 +43,7 @@ máquina y no pueden deducirse. Completa los seis antes de ejecutar nada.
 │                            └───────┬───────────────┘            │
 │                                    │ 0.0.0.0:7171               │
 │  docker desktop start|stop ◄───────┤                            │
-│  vmrun start|suspend     ◄─────────┤  ejecuta acciones          │
+│  vmrun start|stop soft   ◄─────────┤  ejecuta acciones          │
 │  teclas de medios (SendInput) ◄────┘  de lista blanca           │
 └────────────────────────────────┬───────────────────────────────┘
                                  │ LAN, HTTP, perfil Privado
@@ -61,7 +61,8 @@ Flujo en una frase: `panel.exe` consulta dos fuentes a cadencias distintas, mant
 último estado conocido en memoria y lo empuja al teléfono por Server-Sent Events; el
 teléfono solo pinta y, con un token, dispara acciones de una lista cerrada.
 
-**Lo que el panel nunca hace:** no guarda históricos, no tiene base de datos, no expone
+**Lo que el panel nunca hace:** no guarda históricos en el PC (las gráficas de 1 y 5
+minutos viven en la memoria del teléfono), no tiene base de datos, no expone
 los PAT al teléfono, no acepta comandos arbitrarios y no usa TLS en esta versión.
 
 ### Separación de lectura y escritura
@@ -176,14 +177,15 @@ Get-ChildItem "C:\Program Files*\VMware\VMware Workstation\vmrun.exe"
 ```
 
 Pon esa ruta en `actions.vmrun_path`. Comprueba que `vmrun` responde y que la VM
-responde a suspensión suave:
+responde al apagado ordenado:
 
 ```powershell
 & "<ruta>\vmrun.exe" -T ws list
-& "<ruta>\vmrun.exe" -T ws suspend "C:\Users\USUARIO\Documents\Virtual Machines\MI_VM\MI_VM.vmx" soft
+& "<ruta>\vmrun.exe" -T ws stop "C:\Users\USUARIO\Documents\Virtual Machines\MI_VM\MI_VM.vmx" soft
 ```
 
-`suspend ... soft` requiere **VMware Tools instalado en el huésped**. Si falla, instala
+`stop ... soft` pide al sistema invitado que se apague ordenadamente y requiere **VMware
+Tools instalado en el huésped**. Si falla, instala
 VMware Tools en MI_VM antes de habilitar el botón. El panel nunca usa `stop hard`.
 
 El archivo `.vmxf` no es argumento válido; solo se usa `MI_VM.vmx`.
@@ -303,15 +305,23 @@ Tailscale o WireGuard, no con port forwarding.
 
 ```powershell
 cd <repo>
-go build -o C:\Tools\calisto-panel\panel.exe ./cmd/panel
+go build -ldflags "-H=windowsgui" -o C:\Tools\calisto-panel\panel.exe ./cmd/panel
 C:\Tools\calisto-panel\panel.exe -config C:\ProgramData\CalistoPanel\config.yaml
 ```
+
+`-H=windowsgui` compila `panel.exe` **sin consola**: al arrancarlo con la tarea programada
+no se abre ninguna ventana negra y no hay nada que cerrar por error (cerrar una consola
+mataba el proceso). Consecuencia: ya no ves los errores de arranque en pantalla. Si
+`panel.exe` no llega a subir (una `config.yaml` inválida, por ejemplo), el motivo queda en
+`C:\ProgramData\CalistoPanel\logs\panel-startup.log`. Para depurar con consola usa
+`go run ./cmd/panel -config ./config.yaml`, que sí la tiene. Para detener el servicio:
+`Stop-ScheduledTask CalistoPanel`.
 
 Verifica, en este orden:
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:7171/healthz          # {"ok":true}
-curl.exe -N http://127.0.0.1:7171/api/stream             # eventos cada 5 s, Ctrl+C para salir
+curl.exe -N http://127.0.0.1:7171/api/stream             # eventos cada pocos segundos, Ctrl+C para salir
 ```
 
 Desde el teléfono, en el navegador normal: `http://<IP-del-PC>:7171/`. Si el `healthz`
@@ -416,6 +426,36 @@ sin sesiones abiertas de nada.
 
 ---
 
+### 5.6 Si el panel deja de conectar tras un rato
+
+Dos cosas distintas pueden pasar, y el log del PC dice cuál. En
+`C:\ProgramData\CalistoPanel\logs\panel.log` cada conexión del teléfono deja un
+`stream opened` y un `stream closed` con la IP del teléfono y cuánto duró:
+
+```powershell
+Select-String 'stream (opened|closed)' C:\ProgramData\CalistoPanel\logs\panel.log | Select-Object -Last 20
+```
+
+- **Cierres cada pocos minutos y reaperturas enseguida:** el teléfono suelta la conexión
+  (radio o Wi-Fi dormidos). La página ya se reconstruye sola (§ARCHITECTURE 3): sin
+  eventos en 20 s rehace la conexión y, a los 45 s, se recarga. Si aun así tarda, mira los
+  ajustes de abajo.
+- **Un `stream closed` y ningún `stream opened` después:** el teléfono ni lo intenta. Es
+  el proceso de Fully Kiosk muerto o congelado por MIUI, o la pantalla apagada. Ninguna
+  mejora de la página puede arreglarlo desde dentro; hay que evitar que MIUI lo toque.
+
+Ajustes de MIUI que más influyen (los nombres exactos cambian entre versiones):
+
+1. Los tres de §5.1, y comprueba que quedaron guardados: Seguridad → Batería → Fully Kiosk
+   debe decir **Sin restricciones**, no "Ahorro inteligente".
+2. **Wi-Fi activo con la pantalla apagada:** Ajustes → Wi-Fi → ajustes avanzados o
+   adicionales → "Mantener Wi-Fi activado durante la suspensión" en **Siempre**.
+3. Desactiva el **Ahorro de batería** del sistema y la optimización de batería de Fully
+   Kiosk (Ajustes → Aplicaciones → Fully Kiosk → Ahorro de batería).
+4. En Fully Kiosk, busca los ajustes de recarga automática (*Web Auto Reload*): recargar al
+   volver la conexión y al encenderse la pantalla.
+5. Mantén el teléfono **cargando** y con *Mantener pantalla encendida* activo en Fully Kiosk.
+
 ## 6. Operación
 
 ### 6.0 Los tres paneles
@@ -425,9 +465,30 @@ lados (o tocando la pestaña de arriba). Recuerda el último panel visto al reca
 
 | Panel | Contenido |
 |---|---|
-| Sistema | dos tercios de la pantalla son los sensores; el tercio derecho tiene las apps que pasan del 10 % de CPU o de RAM y los botones de medios |
-| Docker | encender/apagar Docker Desktop; los contenedores de un mismo proyecto de Compose salen como **un solo padre** (encender/apagar todo, CPU y RAM sumadas) y "Ver" despliega sus hijos, cada uno con su botón |
-| Pipelines | los botones de la VM y el estado de los pipelines; "En espera" mientras no haya ninguno configurado |
+| Sistema | la mitad izquierda son **tres gráficas** (ventana de 1 o 5 min a tu elección): CPU y RAM con eje fijo de 0 a 100 %; temperaturas de CPU y GPU con mínimo fijo (20 °C) y máximo que se ajusta; y la bajada de red, también con máximo ajustable. Cada serie tiene su color y su valor en vivo. La derecha son las apps que más consumen, lo que suena y los botones de medios (⏮, −10 s, ▶/⏸, +10 s, ⏭) |
+| Docker | encender/apagar Docker Desktop; los contenedores de un mismo proyecto de Compose salen como **un solo padre** (CPU y RAM sumadas). **Toda tarjeta** (padre, hijo o contenedor suelto) tiene Encender, Apagar y Abrir. "Abrir" muestra los logs: en un padre, una vista con los contenedores a la izquierda y los logs de todo el grupo a la derecha, mezclados por hora y con un color por contenedor; en un hijo o suelto, solo los suyos. "← Volver" regresa a donde estabas |
+| Pipelines | la tarjeta de la VM (nombre, estado, CPU y RAM del PC, y Encender/Apagar; apagar es un apagado ordenado del invitado) y el estado de los pipelines; "En espera" mientras no haya ninguno configurado |
+
+**Gráficas.** Cuando un valor sube mucho se marca: pasa a ámbar desde el 80 % (CPU, RAM) o
+80 °C, y a rojo con ⚠, borde rojo parpadeante y la zona de peligro sombreada desde
+95 % de CPU, 92 % de RAM, 90 °C de CPU o 88 °C de GPU. El historial vive en la memoria de
+la página y se copia al teléfono cada 15 s para que una recarga no lo borre; el PC no guarda
+nada. Los umbrales son constantes de `web/index.html` (`SERIES`).
+
+**Apps que más consumen.** Cada lista muestra las 5 mejores por CPU o por RAM, con el
+promedio de las últimas 3 lecturas (15 s) para que no parpadeen, oculta el ruido bajo 1 %
+de CPU o 2 % de RAM (sin dejar menos de 3 filas: las de relleno salen atenuadas) y marca
+en **rojo** las que pasan del 10 %.
+
+**Botones.** Los de medios no tienen espera: se pueden repetir al instante. Los de
+encender/apagar se bloquean por pares: al pulsar "encender" se bloquea y "apagar" queda
+disponible de inmediato, aunque la acción tarde (levantar Docker). La marca ✓/✗ se
+difumina a los pocos segundos. Los logs piden el token (⚙), porque pueden contener
+secretos; el resto del panel se ve sin él.
+
+**Qué suena.** Se lee de la sesión de medios de Windows, la misma que muestra el control
+de volumen. Salta ±10 s solo si la app deja buscar (YouTube y Spotify sí; algunos
+directos no, y entonces los botones quedan deshabilitados).
 
 "Apps" son los ejecutables fuera de `C:\Windows`, sumados por nombre (Chrome son todos sus
 procesos). Para ocultar alguna, agrégala a `processes.exclude` en `config.yaml`
@@ -496,9 +557,8 @@ Get-NetFirewallRule -DisplayName "Calisto Panel 7171" | Get-NetFirewallPortFilte
 | Tile de CI en `auth` | PAT caducado o sin scope Build (Read) | regenerar el PAT |
 | Tile de CI en `error` tras funcionar días | throttling de Azure DevOps | subir `ci.interval` a 150 s |
 | Botones deshabilitados | el token no está en `localStorage` de este navegador | §5.4 |
-| `429` al pulsar un botón | límite de frecuencia de acciones | esperar; es el comportamiento esperado |
 | El panel desaparece tras unas horas | MIUI mató Fully Kiosk | §5.1, los tres ajustes |
-| `vm.suspend` falla siempre | falta VMware Tools en MI_VM | §4.3 |
+| `vm.stop` falla siempre | falta VMware Tools en MI_VM | §4.3 |
 | Las teclas de medios no hacen nada | `panel.exe` no corre en tu sesión interactiva | §4.10 |
 
 ### 6.4 Mantenimiento con calendario
@@ -548,9 +608,8 @@ cadenas sintéticas en el test unitario del parser. El fixture valida el recorri
 
 **Incluido:** un tile por cada sensor de `config.yaml` (hoy 5: CPU, temperatura de CPU,
 temperatura de GPU, RAM y red) más la lista de pipelines de CI, 6 acciones
-(`docker.start`, `docker.stop`, `vm.suspend`, `vm.start`, `media.playpause`,
+(`docker.start`, `docker.stop`, `vm.stop`, `vm.start`, `media.playpause`,
 `media.next`), SSE, token, arranque automático, firewall, Fully Kiosk configurado.
 
-**Excluido a propósito, documentado en `docs/ARCHITECTURE.md`:** metadatos de música
-(título y artista vía SMTC), GitHub Actions, TLS, Tailscale, históricos y gráficas,
+**Excluido a propósito, documentado en `docs/ARCHITECTURE.md`:** GitHub Actions, TLS, Tailscale, históricos de más de 5 minutos,
 soporte multi-PC, cualquier framework de frontend.

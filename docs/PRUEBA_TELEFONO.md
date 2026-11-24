@@ -31,7 +31,7 @@ En PowerShell, dentro de la carpeta del repo:
 
 ```powershell
 New-Item -ItemType Directory -Force C:\Tools\calisto-panel | Out-Null
-go build -o C:\Tools\calisto-panel\panel.exe ./cmd/panel
+go build -ldflags "-H=windowsgui" -o C:\Tools\calisto-panel\panel.exe ./cmd/panel
 C:\Tools\calisto-panel\panel.exe -config .\config.yaml
 ```
 
@@ -170,18 +170,18 @@ de música o un vídeo en el PC.
 
 5. Toca **Docker ■** una vez. El botón debe pasar a **"¿Confirmar?"** en naranja. **No
    lo toques otra vez**: espera 3 segundos y vuelve a su aspecto normal. Lo mismo con
-   **VM ⏸**.
+   **VM ■**.
 
-> Pulsar el segundo toque de `Docker ■` detiene Docker Desktop, y el de `VM ⏸` suspende
-> la máquina `MI_VM`. Hazlo solo cuando quieras de verdad; ambos son reversibles
-> (`Docker ▶` y `VM ▶`), pero `VM ⏸` requiere **VMware Tools instalado en el huésped**
-> (README §4.3).
+> Pulsar el segundo toque de `Docker ■` detiene Docker Desktop, y el de `VM ■` apaga
+> (de forma ordenada) la máquina `MI_VM`. Hazlo solo cuando quieras de verdad; ambos
+> son reversibles (`Docker ▶` y `VM ▶`), pero `VM ■` requiere **VMware Tools instalado en
+> el huésped** (README §4.3).
 
 ### Acciones de Docker y VM (cuando quieras)
 
 6. `Docker ▶` / `Docker ■`: inicia y detiene Docker Desktop. Tarda decenas de segundos;
    el botón queda en `…` hasta terminar.
-7. `VM ▶` / `VM ⏸`: arranca (sin ventana) y suspende `MI_VM`.
+7. `VM ▶` / `VM ■`: arranca (sin ventana) y apaga `MI_VM` (en la pestaña Pipelines).
 
 En el log verás una línea `"action finished"` por cada ejecución, con el resultado y la
 duración.
