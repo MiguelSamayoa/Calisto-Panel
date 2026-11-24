@@ -320,13 +320,28 @@ no el servicio.
 
 ### 4.10 Arranque automático
 
-Dos tareas, con privilegios distintos a propósito.
+Dos tareas, con privilegios distintos a propósito. Ejecuta esto en **cmd como
+administrador**. Las comillas escapadas (`\"`) fallan en PowerShell 5.1.
 
 ```cmd
 schtasks /Create /TN "LibreHardwareMonitor" /TR "\"C:\Tools\LibreHardwareMonitor\LibreHardwareMonitor.exe\"" /SC ONLOGON /RL HIGHEST /RU USUARIO /F
 
 schtasks /Create /TN "CalistoPanel" /TR "\"C:\Tools\calisto-panel\panel.exe\" -config \"C:\ProgramData\CalistoPanel\config.yaml\"" /SC ONLOGON /RL LIMITED /RU USUARIO /F
 ```
+
+`schtasks` deja los valores por defecto, que **matan la tarea a las 72 h** y no la
+arrancan con batería. Corrígelo en PowerShell **como administrador**:
+
+```powershell
+$st = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero)
+Set-ScheduledTask -TaskName LibreHardwareMonitor -Settings $st
+Set-ScheduledTask -TaskName CalistoPanel -Settings $st
+```
+
+Copia antes la configuración a su sitio definitivo
+(`Copy-Item .\config.yaml C:\ProgramData\CalistoPanel\config.yaml`). Para probar sin
+reiniciar sesión: cierra cualquier `panel.exe` manual, `Start-ScheduledTask CalistoPanel`
+y consulta `/healthz`.
 
 `panel.exe` corre **sin elevación**: no la necesita para leer `localhost`, ejecutar
 `docker desktop`, `vmrun` ni enviar teclas de medios. Menos privilegio en el proceso

@@ -248,17 +248,30 @@ Cuando todo lo anterior funcione en el navegador normal:
 
 Solo después de las fases anteriores (README §4.10):
 
-```cmd
-schtasks /Create /TN "LibreHardwareMonitor" /TR "\"C:\Tools\LibreHardwareMonitor\LibreHardwareMonitor.exe\"" /SC ONLOGON /RL HIGHEST /RU USUARIO /F
+1. Copia la configuración a su sitio definitivo (PowerShell normal):
 
-schtasks /Create /TN "CalistoPanel" /TR "\"C:\Tools\calisto-panel\panel.exe\" -config \"C:\ProgramData\CalistoPanel\config.yaml\"" /SC ONLOGON /RL LIMITED /RU USUARIO /F
-```
+   ```powershell
+   Copy-Item .\config.yaml C:\ProgramData\CalistoPanel\config.yaml
+   ```
 
-Antes de eso, copia la configuración a su sitio definitivo:
+2. En **cmd como administrador** (no PowerShell: rompe las comillas):
 
-```powershell
-Copy-Item .\config.yaml C:\ProgramData\CalistoPanel\config.yaml
-```
+   ```cmd
+   schtasks /Create /TN "LibreHardwareMonitor" /TR "\"C:\Tools\LibreHardwareMonitor\LibreHardwareMonitor.exe\"" /SC ONLOGON /RL HIGHEST /RU USUARIO /F
+
+   schtasks /Create /TN "CalistoPanel" /TR "\"C:\Tools\calisto-panel\panel.exe\" -config \"C:\ProgramData\CalistoPanel\config.yaml\"" /SC ONLOGON /RL LIMITED /RU USUARIO /F
+   ```
+
+3. En **PowerShell como administrador**, quita el límite de 72 h y el bloqueo con batería:
+
+   ```powershell
+   $st = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero)
+   Set-ScheduledTask -TaskName LibreHardwareMonitor -Settings $st
+   Set-ScheduledTask -TaskName CalistoPanel -Settings $st
+   ```
+
+4. Cierra sesión y vuelve a entrar: LHM y el panel deben subir solos. Comprueba con
+   `Invoke-RestMethod http://127.0.0.1:7171/healthz`.
 
 `panel.exe` corre **sin elevación** y **no** como servicio de Windows (README §4.10).
 
