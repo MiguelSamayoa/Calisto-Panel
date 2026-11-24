@@ -4,7 +4,7 @@
 .PHONY: build run test lint fmt
 
 build:
-	go build -o C:/Tools/calisto-panel/panel.exe ./cmd/panel
+	go build -ldflags "-H=windowsgui" -o C:/Tools/calisto-panel/panel.exe ./cmd/panel
 
 run:
 	go run ./cmd/panel -config ./config.yaml
