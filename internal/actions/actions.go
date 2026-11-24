@@ -22,11 +22,6 @@ type AlreadyRunningError struct{ Exec string }
 
 func (e *AlreadyRunningError) Error() string { return "action already running: " + e.Exec }
 
-// RateLimitedError means another action started less than rate_limit_ms ago.
-type RateLimitedError struct{ RetryAfter time.Duration }
-
-func (e *RateLimitedError) Error() string { return "rate limited" }
-
 // Started is the body of a 202 response.
 type Started struct {
 	Exec   string `json:"exec"`
@@ -34,12 +29,21 @@ type Started struct {
 	State  string `json:"state"`
 }
 
+// seekStep is how far media.seek_fwd and media.seek_back move the playback position.
+const seekStep = 10 * time.Second
+
 // Deps are the side effects, injected so tests never touch Docker, VMware or keys.
 type Deps struct {
-	Run    func(ctx context.Context, argv []string) error
-	Keys   func(vk uint8) error
+	Run  func(ctx context.Context, argv []string) error
+	Keys func(vk uint8) error
+	Seek func(ctx context.Context, d time.Duration) error
+	// Volume sets the master volume to a percentage 0-100.
+	Volume func(ctx context.Context, pct int) error
 	Report func(hub.ActionUpdate)
 	Log    *slog.Logger
+	// AfterMedia is called after a media action succeeded, so the now-playing state can
+	// be re-read at once instead of at the next poll. May be nil.
+	AfterMedia func()
 	// HasContainer reports whether the server itself listed this container id in its
 	// last poll. Nil means no container is known.
 	HasContainer func(id string) bool
@@ -48,27 +52,33 @@ type Deps struct {
 	ProjectContainers func(project string) []string
 }
 
-// spec is either a process (argv) or a media key (vk); never both.
+// spec is a process (argv), a media key (vk), a relative seek or a volume level; exactly
+// one is set.
+// Media specs are instant: they never wait on, nor are blocked by, anything.
 type spec struct {
-	argv []string
-	vk   uint8
+	argv   []string
+	vk     uint8
+	seek   time.Duration
+	vol    int // 0-100; only meaningful when setVol
+	setVol bool
+	media  bool
 }
 
 const maxMessage = 200
 
 type Executor struct {
-	specs     map[string]spec
-	order     []string
-	deps      Deps
-	base      context.Context
-	timeout   time.Duration
-	rateLimit time.Duration
-	now       func() time.Time
-	docker    bool // container.start|stop.<id> are accepted
+	specs   map[string]spec
+	order   []string
+	deps    Deps
+	base    context.Context
+	timeout time.Duration
+	now     func() time.Time
+	docker  bool // container.* and project.* are accepted
+	volume  bool // media.volume.<0-100> is accepted
 
 	mu      sync.Mutex
-	running map[string]string // action id -> exec id
-	last    time.Time
+	running map[string]string // action id -> exec id (non-media actions only)
+	lastMs  int64
 	wg      sync.WaitGroup
 }
 
@@ -76,14 +86,14 @@ type Executor struct {
 // actions on shutdown; Wait blocks until they have reported.
 func New(base context.Context, cfg config.Actions, deps Deps) *Executor {
 	e := &Executor{
-		specs:     map[string]spec{},
-		deps:      deps,
-		base:      base,
-		timeout:   time.Duration(cfg.TimeoutMs) * time.Millisecond,
-		rateLimit: time.Duration(cfg.RateLimitMs) * time.Millisecond,
-		now:       time.Now,
-		running:   map[string]string{},
-		docker:    cfg.Docker.Enabled,
+		specs:   map[string]spec{},
+		deps:    deps,
+		base:    base,
+		timeout: time.Duration(cfg.TimeoutMs) * time.Millisecond,
+		now:     time.Now,
+		running: map[string]string{},
+		docker:  cfg.Docker.Enabled,
+		volume:  cfg.Media.Enabled,
 	}
 	add := func(id string, s spec) {
 		e.specs[id] = s
@@ -95,12 +105,17 @@ func New(base context.Context, cfg config.Actions, deps Deps) *Executor {
 	}
 	if cfg.VMware.Enabled {
 		v := cfg.VMware
-		add("vm.suspend", spec{argv: []string{v.VmrunPath, "-T", "ws", "suspend", v.VMX, "soft"}})
+		// "soft" asks the guest OS to shut down cleanly (VMware Tools). "hard" would cut
+		// the power and is forbidden: it destroys unsaved work.
+		add("vm.stop", spec{argv: []string{v.VmrunPath, "-T", "ws", "stop", v.VMX, "soft"}})
 		add("vm.start", spec{argv: []string{v.VmrunPath, "-T", "ws", "start", v.VMX, "nogui"}})
 	}
 	if cfg.Media.Enabled {
-		add("media.playpause", spec{vk: cfg.Media.PlayPauseVK})
-		add("media.next", spec{vk: cfg.Media.NextVK})
+		add("media.playpause", spec{vk: cfg.Media.PlayPauseVK, media: true})
+		add("media.prev", spec{vk: cfg.Media.PrevVK, media: true})
+		add("media.next", spec{vk: cfg.Media.NextVK, media: true})
+		add("media.seek_back", spec{seek: -seekStep, media: true})
+		add("media.seek_fwd", spec{seek: seekStep, media: true})
 	}
 	return e
 }
@@ -111,8 +126,10 @@ func (e *Executor) IDs() []string { return append([]string(nil), e.order...) }
 // Wait blocks until every started action has reported its final state.
 func (e *Executor) Wait() { e.wg.Wait() }
 
-// Do validates in the contract order (404, 409, 429; 401 is the caller's), starts
-// the action in the background and returns immediately.
+// Do validates (404, then 409; 401 is the caller's), starts the action in the
+// background and returns immediately. There is no global rate limit: a second
+// concurrent run of the same id is refused with 409, and the client locks the
+// opposite button of a pair itself. Media actions are never refused.
 func (e *Executor) Do(id string) (Started, error) {
 	s, ok := e.resolve(id)
 	if !ok {
@@ -120,22 +137,25 @@ func (e *Executor) Do(id string) (Started, error) {
 	}
 
 	e.mu.Lock()
-	if exec, busy := e.running[id]; busy {
-		e.mu.Unlock()
-		return Started{}, &AlreadyRunningError{Exec: exec}
+	if !s.media {
+		if exec, busy := e.running[id]; busy {
+			e.mu.Unlock()
+			return Started{}, &AlreadyRunningError{Exec: exec}
+		}
 	}
 	now := e.now()
-	if wait := e.rateLimit - now.Sub(e.last); !e.last.IsZero() && wait > 0 {
-		e.mu.Unlock()
-		return Started{}, &RateLimitedError{RetryAfter: wait}
+	ms := max(now.UnixMilli(), e.lastMs+1) // unique even for starts within one millisecond
+	e.lastMs = ms
+	exec := newExecID(ms)
+	if !s.media {
+		e.running[id] = exec
 	}
-	exec := newExecID(now)
-	e.last = now
-	e.running[id] = exec
 	e.wg.Add(1)
 	e.mu.Unlock()
 
-	e.deps.Report(hub.ActionUpdate{ID: id, Exec: exec, State: hub.ActionRunning})
+	if !s.media {
+		e.deps.Report(hub.ActionUpdate{ID: id, Exec: exec, State: hub.ActionRunning})
+	}
 	go e.execute(id, exec, s, now)
 	return Started{Exec: exec, Action: id, State: hub.ActionRunning}, nil
 }
@@ -149,6 +169,13 @@ func (e *Executor) Do(id string) (Started, error) {
 func (e *Executor) resolve(id string) (spec, bool) {
 	if s, ok := e.specs[id]; ok {
 		return s, true
+	}
+	if lvl, ok := strings.CutPrefix(id, "media.volume."); ok {
+		n, valid := parseVolume(lvl)
+		if !valid || !e.volume || e.deps.Volume == nil {
+			return spec{}, false
+		}
+		return spec{vol: n, setVol: true, media: true}, true
 	}
 	if !e.docker {
 		return spec{}, false
@@ -183,15 +210,36 @@ func (e *Executor) resolve(id string) (spec, bool) {
 	return spec{}, false
 }
 
+// parseVolume accepts exactly the canonical decimal form of 0..100: one to three digits,
+// no sign, no leading zero, no spaces. Anything else is not a volume action.
+func parseVolume(s string) (int, bool) {
+	if s == "" || len(s) > 3 || (len(s) > 1 && s[0] == '0') {
+		return 0, false
+	}
+	n := 0
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return 0, false
+		}
+		n = n*10 + int(c-'0')
+	}
+	return n, n <= 100
+}
+
 func (e *Executor) execute(id, exec string, s spec, began time.Time) {
 	defer e.wg.Done()
 	ctx, cancel := context.WithTimeout(e.base, e.timeout)
 	defer cancel()
 
 	var err error
-	if s.argv != nil {
+	switch {
+	case s.argv != nil:
 		err = e.deps.Run(ctx, s.argv)
-	} else {
+	case s.setVol:
+		err = e.deps.Volume(ctx, s.vol)
+	case s.seek != 0:
+		err = e.deps.Seek(ctx, s.seek)
+	default:
 		err = e.deps.Keys(s.vk)
 	}
 
@@ -204,10 +252,19 @@ func (e *Executor) execute(id, exec string, s spec, began time.Time) {
 		u.State, u.Message = hub.ActionFailed, truncate(err.Error())
 	}
 
-	e.mu.Lock()
-	delete(e.running, id)
-	e.mu.Unlock()
-	e.deps.Report(u)
+	if !s.media {
+		e.mu.Lock()
+		delete(e.running, id)
+		e.mu.Unlock()
+	}
+	// A media action that worked has nothing to show: the now-playing card changing is
+	// the feedback. A failure is reported like any other.
+	if !s.media || u.State != hub.ActionOK {
+		e.deps.Report(u)
+	}
+	if s.media && u.State == hub.ActionOK && e.deps.AfterMedia != nil {
+		e.deps.AfterMedia()
+	}
 
 	e.deps.Log.Info("action finished",
 		"action", id, "exec", exec, "state", u.State, "message", u.Message,
@@ -221,15 +278,16 @@ func truncate(s string) string {
 	return s
 }
 
-// newExecID encodes the start time in milliseconds as 10 Crockford base32 characters
-// (the timestamp half of a ULID): sortable, and unique because starts are rate limited.
-func newExecID(t time.Time) string {
+// newExecID encodes a millisecond timestamp as 10 Crockford base32 characters (the
+// timestamp half of a ULID): sortable, and unique because Do hands out strictly
+// increasing milliseconds.
+func newExecID(ms int64) string {
 	const alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
-	ms := uint64(t.UnixMilli())
+	v := uint64(ms)
 	var b [10]byte
 	for i := len(b) - 1; i >= 0; i-- {
-		b[i] = alphabet[ms&31]
-		ms >>= 5
+		b[i] = alphabet[v&31]
+		v >>= 5
 	}
 	return string(b[:])
 }
