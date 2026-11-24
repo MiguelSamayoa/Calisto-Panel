@@ -67,3 +67,22 @@ func TestTotalMemory(t *testing.T) {
 		t.Errorf("TotalMemory = %d, %v; want at least 1 GiB", got, err)
 	}
 }
+
+func TestMediaReadOnThisMachine(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	m := StartMedia(ctx)
+	info, err := m.Read(ctx)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	t.Logf("media: %+v", info)
+	if info.Active && info.Status == "" {
+		t.Errorf("an active session must have a status: %+v", info)
+	}
+	if !info.Active {
+		if err := m.SeekBy(ctx, 10*time.Second); err == nil {
+			t.Error("seeking without a session must fail")
+		}
+	}
+}
