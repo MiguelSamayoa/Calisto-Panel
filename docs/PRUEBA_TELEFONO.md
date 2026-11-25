@@ -78,7 +78,7 @@ Cualquier `"sensor_id not found in lhm data"` indica qué tile tiene el ID mal.
 ipconfig
 ```
 
-Anota la **Dirección IPv4 de la Ethernet** (en tu última lectura era `<IP_DEL_PC>`). Esa
+Anota la **Dirección IPv4 de la Ethernet**. Esa
 es la IP que escribirás en el teléfono. Si usas el PC por Wi-Fi, usa la IPv4 del adaptador
 Wi-Fi.
 
@@ -257,9 +257,9 @@ Solo después de las fases anteriores (README §4.10):
 2. En **cmd como administrador** (no PowerShell: rompe las comillas):
 
    ```cmd
-   schtasks /Create /TN "LibreHardwareMonitor" /TR "\"C:\Tools\LibreHardwareMonitor\LibreHardwareMonitor.exe\"" /SC ONLOGON /RL HIGHEST /RU USUARIO /F
+   schtasks /Create /TN "LibreHardwareMonitor" /TR "\"C:\Tools\LibreHardwareMonitor\LibreHardwareMonitor.exe\"" /SC ONLOGON /RL HIGHEST /RU %USERNAME% /F
 
-   schtasks /Create /TN "CalistoPanel" /TR "\"C:\Tools\calisto-panel\panel.exe\" -config \"C:\ProgramData\CalistoPanel\config.yaml\"" /SC ONLOGON /RL LIMITED /RU USUARIO /F
+   schtasks /Create /TN "CalistoPanel" /TR "\"C:\Tools\calisto-panel\panel.exe\" -config \"C:\ProgramData\CalistoPanel\config.yaml\"" /SC ONLOGON /RL LIMITED /RU %USERNAME% /F
    ```
 
 3. En **PowerShell como administrador**, quita el límite de 72 h y el bloqueo con batería:

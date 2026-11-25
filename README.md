@@ -181,7 +181,7 @@ responde al apagado ordenado:
 
 ```powershell
 & "<ruta>\vmrun.exe" -T ws list
-& "<ruta>\vmrun.exe" -T ws stop "C:\Users\USUARIO\Documents\Virtual Machines\MI_VM\MI_VM.vmx" soft
+& "<ruta>\vmrun.exe" -T ws stop "C:\Users\<USUARIO>\Documents\Virtual Machines\MI_VM\MI_VM.vmx" soft
 ```
 
 `stop ... soft` pide al sistema invitado que se apague ordenadamente y requiere **VMware
@@ -334,9 +334,9 @@ Dos tareas, con privilegios distintos a propósito. Ejecuta esto en **cmd como
 administrador**. Las comillas escapadas (`\"`) fallan en PowerShell 5.1.
 
 ```cmd
-schtasks /Create /TN "LibreHardwareMonitor" /TR "\"C:\Tools\LibreHardwareMonitor\LibreHardwareMonitor.exe\"" /SC ONLOGON /RL HIGHEST /RU USUARIO /F
+schtasks /Create /TN "LibreHardwareMonitor" /TR "\"C:\Tools\LibreHardwareMonitor\LibreHardwareMonitor.exe\"" /SC ONLOGON /RL HIGHEST /RU %USERNAME% /F
 
-schtasks /Create /TN "CalistoPanel" /TR "\"C:\Tools\calisto-panel\panel.exe\" -config \"C:\ProgramData\CalistoPanel\config.yaml\"" /SC ONLOGON /RL LIMITED /RU USUARIO /F
+schtasks /Create /TN "CalistoPanel" /TR "\"C:\Tools\calisto-panel\panel.exe\" -config \"C:\ProgramData\CalistoPanel\config.yaml\"" /SC ONLOGON /RL LIMITED /RU %USERNAME% /F
 ```
 
 `schtasks` deja los valores por defecto, que **matan la tarea a las 72 h** y no la

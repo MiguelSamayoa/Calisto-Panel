@@ -140,7 +140,7 @@ actions:
     vmrun_path: "C:\\Program Files (x86)\\VMware\\VMware Workstation\\vmrun.exe"
     # Solo el .vmx. El .vmxf no es argumento válido para vmrun.
     # stop soft (apagado ordenado) requiere VMware Tools en el huésped.
-    vmx: "C:\\Users\\USUARIO\\Documents\\Virtual Machines\\MI_VM\\MI_VM.vmx"
+    vmx: "C:\\Users\\REEMPLAZAR\\Documents\\Virtual Machines\\MI_VM\\MI_VM.vmx"
 
   media:
     enabled: true
