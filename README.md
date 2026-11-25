@@ -38,7 +38,7 @@ máquina y no pueden deducirse. Completa los seis antes de ejecutar nada.
 │  (dev.azure.com, HTTPS, PAT)           │                        │
 │                                        ▼                        │
 │                            ┌───────────────────────┐            │
-│                            │ panel.exe (Go 1.26.1) │            │
+│                            │ panel.exe (Go 1.26.11) │            │
 │                            │  estado en memoria    │            │
 │                            └───────┬───────────────┘            │
 │                                    │ 0.0.0.0:7171               │
@@ -84,7 +84,7 @@ irreversible y las dos destructivas exigen doble toque.
 | Componente | Versión verificada en tu equipo | Nota |
 |---|---|---|
 | Windows | 11, 26H2, compilación 26300.10078 | SendInput de teclas de medios requiere sesión interactiva |
-| Go | 1.26.1 windows/amd64 | `CGO_ENABLED=0` |
+| Go | 1.26.11 windows/amd64 | `CGO_ENABLED=0` |
 | LibreHardwareMonitor | última estable | **requiere privilegios de administrador** para temperaturas y GPU |
 | Docker Desktop | CLI plugin v0.4.3 presente | el subcomando `docker desktop` existe desde Docker Desktop 4.37 |
 | VMware Workstation Pro | instalado | `vmrun.exe` se distribuye con Pro, no con Player |

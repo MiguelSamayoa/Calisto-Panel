@@ -15,7 +15,7 @@ Host único. Red local. Sin TLS. Sin base de datos.
 
 ## Stack exacto
 
-- Go **1.26.1**, `GOOS=windows`, `GOARCH=amd64`, `CGO_ENABLED=0`.
+- Go **1.26.11**, `GOOS=windows`, `GOARCH=amd64`, `CGO_ENABLED=0`.
 - Frontend: **un** `web/index.html` con `<style>` y `<script>` en línea, servido con
   `embed.FS`. Vanilla JS, CSS Grid, ES2017.
 - Transporte de datos: Server-Sent Events.

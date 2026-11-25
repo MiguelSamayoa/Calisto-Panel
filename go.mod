@@ -1,6 +1,6 @@
 module github.com/MiguelSamayoa/calisto-panel
 
-go 1.26.1
+go 1.26.11
 
 require (
 	golang.org/x/sys v0.50.0
