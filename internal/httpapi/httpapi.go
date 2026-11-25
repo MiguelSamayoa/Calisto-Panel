@@ -19,6 +19,11 @@ import (
 
 const maxBody = 1 << 10 // POST has no meaningful body
 
+// coverTypes are the only content types the cover endpoint will serve.
+var coverTypes = map[string]bool{
+	"image/png": true, "image/jpeg": true, "image/gif": true, "image/webp": true, "image/bmp": true,
+}
+
 // ErrNotFound is what a LogsFunc returns for a project or container the server does
 // not know.
 var ErrNotFound = errors.New("not found")
@@ -68,14 +73,18 @@ func (s *Server) handleCover(w http.ResponseWriter, _ *http.Request) {
 	if s.cover != nil {
 		img = s.cover()
 	}
-	if len(img) == 0 {
+	// The bytes come from whatever app publishes the thumbnail, so only a sniffed image
+	// type is served; anything else (HTML, say) would run in the panel's origin.
+	ct := http.DetectContentType(img)
+	if len(img) == 0 || !coverTypes[ct] {
 		w.Header().Set("Cache-Control", "no-store")
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
 		return
 	}
-	w.Header().Set("Content-Type", http.DetectContentType(img))
+	w.Header().Set("Content-Type", ct)
 	w.Header().Set("Cache-Control", "private, max-age=300")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; sandbox")
 	_, _ = w.Write(img)
 }
 

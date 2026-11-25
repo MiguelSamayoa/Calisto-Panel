@@ -231,3 +231,11 @@ func TestCover(t *testing.T) {
 		t.Fatalf("cover: status %d type %q", w.Code, w.Header().Get("Content-Type"))
 	}
 }
+
+func TestCoverRejectsNonImage(t *testing.T) {
+	r := newRig()
+	r.cover = []byte("<html><script>alert(1)</script></html>")
+	if w := r.do("GET", "/api/media/cover", ""); w.Code != 404 {
+		t.Fatalf("html cover: status %d, want 404", w.Code)
+	}
+}
