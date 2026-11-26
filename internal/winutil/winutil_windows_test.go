@@ -86,3 +86,20 @@ func TestMediaReadOnThisMachine(t *testing.T) {
 		}
 	}
 }
+
+func TestTailBufferKeepsNewestBytes(t *testing.T) {
+	w := &tailBuffer{max: 10}
+	for i := 0; i < 100; i++ {
+		if n, err := w.Write([]byte("0123456789")); n != 10 || err != nil {
+			t.Fatalf("write = %d, %v", n, err)
+		}
+	}
+	w.Write([]byte("tail"))
+	got := w.tail()
+	if len(got) != 10 || string(got[6:]) != "tail" {
+		t.Errorf("tail = %q, want the last 10 bytes ending in tail", got)
+	}
+	if len(w.buf) > 2*w.max+10 {
+		t.Errorf("buffer grew to %d", len(w.buf))
+	}
+}

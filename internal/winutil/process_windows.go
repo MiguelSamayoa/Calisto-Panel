@@ -47,11 +47,38 @@ func CombinedOutput(ctx context.Context, argv []string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	out, err := cmd.CombinedOutput()
-	if err != nil {
+	w := &tailBuffer{max: maxCombinedOutput}
+	cmd.Stdout, cmd.Stderr = w, w
+	if err := cmd.Run(); err != nil {
 		return nil, fmt.Errorf("running %s: %w", filepath.Base(argv[0]), err)
 	}
-	return out, nil
+	return w.tail(), nil
+}
+
+// maxCombinedOutput caps what CombinedOutput keeps. `docker logs --tail` limits lines,
+// not their length, so a container printing huge lines must not exhaust the panel's RAM.
+const maxCombinedOutput = 1 << 20
+
+// tailBuffer keeps only the last max bytes written to it: the newest log lines matter.
+// It always accepts the whole write so the child process never blocks or fails.
+type tailBuffer struct {
+	buf []byte
+	max int
+}
+
+func (t *tailBuffer) tail() []byte {
+	if len(t.buf) > t.max {
+		return t.buf[len(t.buf)-t.max:]
+	}
+	return t.buf
+}
+
+func (t *tailBuffer) Write(p []byte) (int, error) {
+	t.buf = append(t.buf, p...)
+	if len(t.buf) > 2*t.max { // trim in bulk, not on every write
+		t.buf = append([]byte(nil), t.buf[len(t.buf)-t.max:]...)
+	}
+	return len(p), nil
 }
 
 // Run is Output with the stdout discarded.
