@@ -630,6 +630,12 @@ Consecuencias aceptadas:
    alguien use. Por eso `container.stop` exige doble toque. Nombres de contenedor, imagen
    y puertos son texto controlado por quien crea el contenedor: el cliente los pinta
    siempre con `textContent`, nunca como HTML.
+8. Endurecimiento del servidor HTTP: `MaxHeaderBytes` de 16 KiB, `ReadHeaderTimeout` de 5 s,
+   `IdleTimeout` de 2 min y como máximo 16 streams SSE simultáneos (el 17.º recibe `503`).
+   No hay `ReadTimeout` porque cancelaría el contexto del stream. El `action` de una
+   petición sin token se recorta a 64 caracteres antes de registrarse. La salida de
+   `docker logs` se limita a 1 MiB por contenedor (se conserva el final), y el proyecto
+   Compose se pide a Docker por su etiqueta, no se extrae de la lista `Labels`.
 
 ---
 
