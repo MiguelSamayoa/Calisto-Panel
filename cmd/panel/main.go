@@ -27,6 +27,7 @@ import (
 const shutdownGrace = 5 * time.Second
 
 func main() {
+	winutil.HideOwnConsole()
 	configPath := flag.String("config", `C:\ProgramData\CalistoPanel\config.yaml`, "path to config.yaml")
 	flag.Parse()
 	if err := run(*configPath); err != nil {
