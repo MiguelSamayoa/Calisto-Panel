@@ -20,30 +20,30 @@ type outputFunc func(ctx context.Context, argv []string) ([]byte, error)
 
 // The argv are constants: nothing the network or a container controls reaches them.
 var (
-	psArgv    = []string{"docker", "ps", "-a", "--format", "{{json .}}"}
+	psArgv    = []string{"docker", "ps", "-a", "--format", psFormat}
 	statsArgv = []string{"docker", "stats", "--no-stream", "--format", "{{json .}}"}
 )
 
+// psFormat asks docker for the compose project label by name. Parsing the comma-joined
+// `.Labels` string instead would let any label value containing
+// ",com.docker.compose.project=x" forge the project of a container.
+const psFormat = `{"ID":{{json .ID}},"Names":{{json .Names}},"Image":{{json .Image}},"Status":{{json .Status}},"State":{{json .State}},"Ports":{{json .Ports}},"Project":{{json (.Label "com.docker.compose.project")}}}`
+
 type psRow struct {
-	ID     string `json:"ID"`
-	Names  string `json:"Names"`
-	Image  string `json:"Image"`
-	Status string `json:"Status"`
-	State  string `json:"State"`
-	Ports  string `json:"Ports"`
-	Labels string `json:"Labels"` // "k=v,k=v"
+	ID      string `json:"ID"`
+	Names   string `json:"Names"`
+	Image   string `json:"Image"`
+	Status  string `json:"Status"`
+	State   string `json:"State"`
+	Ports   string `json:"Ports"`
+	Project string `json:"Project"`
 }
 
-const composeProjectLabel = "com.docker.compose.project="
-
-// composeProject extracts the compose project from docker's comma-separated label
-// list. Anything that is not a well-formed project name counts as no project, so a
-// container can never be grouped under (or addressed as) an odd-looking name.
-func composeProject(labels string) string {
-	for _, kv := range strings.Split(labels, ",") {
-		if name, ok := strings.CutPrefix(kv, composeProjectLabel); ok && hub.ValidProject(name) {
-			return name
-		}
+// composeProject keeps a project name only when it is well formed, so a container can
+// never be grouped under (or addressed as) an odd-looking name.
+func composeProject(name string) string {
+	if hub.ValidProject(name) {
+		return name
 	}
 	return ""
 }
@@ -116,7 +116,7 @@ func buildContainers(ps []psRow, stats []statsRow) []hub.Container {
 		if !hub.ValidContainerID(p.ID) {
 			continue
 		}
-		c := hub.Container{ID: p.ID, Project: composeProject(p.Labels), Name: p.Names, Image: p.Image, Status: p.Status, State: p.State, Ports: p.Ports}
+		c := hub.Container{ID: p.ID, Project: composeProject(p.Project), Name: p.Names, Image: p.Image, Status: p.Status, State: p.State, Ports: p.Ports}
 		if s, ok := byID[p.ID]; ok {
 			if v, ok := parsePercent(s.CPUPerc); ok {
 				c.CPU = &v

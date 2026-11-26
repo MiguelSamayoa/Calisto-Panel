@@ -28,7 +28,7 @@ func TestParseSize(t *testing.T) {
 	}
 }
 
-const psOut = `{"ID":"aaaaaaaaaaaa","Names":"web","Image":"nginx:1","Status":"Up 3 hours","State":"running","Ports":"0.0.0.0:80->80/tcp","Labels":"a=b,com.docker.compose.project=forms-dev,com.docker.compose.service=web"}
+const psOut = `{"ID":"aaaaaaaaaaaa","Names":"web","Image":"nginx:1","Status":"Up 3 hours","State":"running","Ports":"0.0.0.0:80->80/tcp","Project":"forms-dev"}
 {"ID":"bbbbbbbbbbbb","Names":"db","Image":"postgres","Status":"Exited (0) 2 days ago","State":"exited","Ports":""}
 {"ID":"--rm","Names":"evil","Image":"x","Status":"","State":"running","Ports":""}
 `
@@ -87,19 +87,28 @@ func TestFetchContainersEngineDown(t *testing.T) {
 }
 
 func TestComposeProject(t *testing.T) {
-	for labels, want := range map[string]string{
-		"":                                     "",
-		"a=b,c=d":                              "",
-		"com.docker.compose.project=forms-dev": "forms-dev",
-		"x=y,com.docker.compose.project=app_1,z=w": "app_1",
-		"com.docker.compose.project=Has Space":     "", // not a valid project name
-		"com.docker.compose.project=":              "",
-		"com.docker.compose.project=a;b":           "",
-		"com.docker.compose.projectx=nope":         "",
-		"other.com.docker.compose.project=nope":    "",
+	for name, want := range map[string]string{
+		"":          "",
+		"forms-dev": "forms-dev",
+		"app_1":     "app_1",
+		"Has Space": "", // not a valid project name
+		"a;b":       "",
+		"a,b=c":     "",
 	} {
-		if got := composeProject(labels); got != want {
-			t.Errorf("composeProject(%q) = %q, want %q", labels, got, want)
+		if got := composeProject(name); got != want {
+			t.Errorf("composeProject(%q) = %q, want %q", name, got, want)
 		}
+	}
+}
+
+func TestForgedLabelCannotSetProject(t *testing.T) {
+	// The project comes from its own field, so a label value that merely looks like the
+	// compose label has no effect: an odd project name is dropped.
+	rows, err := jsonLines[psRow]([]byte(`{"ID":"cccccccccccc","Names":"x","State":"running","Project":"a,com.docker.compose.project=b"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := buildContainers(rows, nil)[0].Project; got != "" {
+		t.Errorf("project = %q, want none", got)
 	}
 }
