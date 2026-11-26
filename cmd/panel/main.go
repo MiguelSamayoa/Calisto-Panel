@@ -85,6 +85,8 @@ func run(configPath string) error {
 		Handler: httpapi.New(cfg.Secrets.APIToken.Reveal(), web.Index, h.ServeStream, exec.Do, newLogsFunc(h, winutil.CombinedOutput), h.MediaCover, log),
 		// No WriteTimeout: it would cut the long-lived SSE stream.
 		ReadHeaderTimeout: 5 * time.Second,
+		// No ReadTimeout either: it would also cancel the context of the SSE stream.
+		IdleTimeout:    2 * time.Minute,
 		MaxHeaderBytes: 16 << 10,
 	}
 

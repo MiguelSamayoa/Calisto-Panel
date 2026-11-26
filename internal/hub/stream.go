@@ -39,9 +39,13 @@ func (h *Hub) dropLocked(s *subscriber) {
 // subscribe registers a subscriber pre-loaded with hello and a snapshot of every
 // domain, so a new client does not wait for the next poll. Doing it under the lock
 // guarantees no event is missed or duplicated between the snapshot and the live feed.
+// It returns nil when maxSubscribers streams are already open.
 func (h *Hub) subscribe() *subscriber {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if len(h.subs) >= maxSubscribers {
+		return nil
+	}
 	s := &subscriber{ch: make(chan []byte, subBuffer)}
 	s.ch <- frame("hello", h.hello)
 	s.ch <- frame("sensors", h.sensorsPayloadLocked())
@@ -72,6 +76,13 @@ func (h *Hub) unsubscribe(s *subscriber) {
 // ServeStream is the GET /api/stream handler. The http.Server must not set a
 // WriteTimeout, or it would cut the stream.
 func (h *Hub) ServeStream(w http.ResponseWriter, r *http.Request) {
+	s := h.subscribe()
+	if s == nil {
+		http.Error(w, "too many streams", http.StatusServiceUnavailable)
+		return
+	}
+	defer h.unsubscribe(s)
+
 	rc := http.NewResponseController(w)
 	hd := w.Header()
 	hd.Set("Content-Type", "text/event-stream")
@@ -82,9 +93,6 @@ func (h *Hub) ServeStream(w http.ResponseWriter, r *http.Request) {
 	if _, err := fmt.Fprint(w, "retry: 3000\n\n"); err != nil || rc.Flush() != nil {
 		return
 	}
-
-	s := h.subscribe()
-	defer h.unsubscribe(s)
 
 	idle := time.NewTimer(h.keepalive)
 	defer idle.Stop()

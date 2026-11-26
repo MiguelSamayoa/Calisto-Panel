@@ -251,3 +251,20 @@ func TestSlowSubscriberDropped(t *testing.T) {
 		t.Error("subscriber with a full buffer was not dropped")
 	}
 }
+
+func TestSubscriberCap(t *testing.T) {
+	h, _ := fakeClock(t, testConfig())
+	for range maxSubscribers {
+		if h.subscribe() == nil {
+			t.Fatal("subscribe refused below the cap")
+		}
+	}
+	if h.subscribe() != nil {
+		t.Error("subscribe accepted a stream past the cap")
+	}
+	rec := httptest.NewRecorder()
+	h.ServeStream(rec, httptest.NewRequest("GET", "/api/stream", nil))
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("status %d past the cap, want 503", rec.Code)
+	}
+}

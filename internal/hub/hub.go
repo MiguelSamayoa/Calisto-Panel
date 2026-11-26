@@ -36,6 +36,9 @@ const (
 	// actionRetention is how long a finished action stays in the actions event.
 	actionRetention = 60 * time.Second
 	subBuffer       = 32
+	// maxSubscribers bounds open SSE streams: GET /api/stream needs no token, so without
+	// a cap one LAN device could hold thousands of goroutines. One phone needs one.
+	maxSubscribers = 16
 )
 
 type Hub struct {
