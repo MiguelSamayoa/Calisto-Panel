@@ -112,7 +112,7 @@ func (s *Server) handleDo(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 
 	if !s.authorized(r) {
-		s.log.Warn("unauthorized action request", "remote", r.RemoteAddr, "action", id)
+		s.log.Warn("unauthorized action request", "remote", r.RemoteAddr, "action", clip(id))
 		w.Header().Set("WWW-Authenticate", "Bearer")
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
@@ -155,7 +155,7 @@ func (s *Server) handleLogs(kind string) http.HandlerFunc {
 		case errors.Is(err, ErrNotFound):
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
 		default:
-			s.log.Error("reading logs", "kind", kind, "name", name, "err", err)
+			s.log.Error("reading logs", "kind", kind, "name", clip(name), "err", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
 		}
 	}
@@ -171,6 +171,16 @@ func (s *Server) logStream(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 		s.log.Info("stream closed", "remote", r.RemoteAddr, "duration", time.Since(start).Round(time.Second).String())
 	})
+}
+
+// clip bounds an untrusted string before it is logged, so an unauthenticated client
+// cannot flood the rotating log with huge lines.
+func clip(s string) string {
+	const max = 64
+	if len(s) > max {
+		return s[:max] + "…"
+	}
+	return s
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

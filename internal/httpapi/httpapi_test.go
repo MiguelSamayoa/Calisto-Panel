@@ -239,3 +239,14 @@ func TestCoverRejectsNonImage(t *testing.T) {
 		t.Fatalf("html cover: status %d, want 404", w.Code)
 	}
 }
+
+func TestClipBoundsLoggedInput(t *testing.T) {
+	if got := clip(strings.Repeat("a", 5000)); len(got) > 70 {
+		t.Errorf("clip left %d bytes", len(got))
+	}
+	r := newRig()
+	r.do("POST", "/api/do/"+strings.Repeat("a", 5000), "")
+	if r.logs.Len() > 1000 {
+		t.Errorf("an unauthenticated request wrote %d bytes of log", r.logs.Len())
+	}
+}
