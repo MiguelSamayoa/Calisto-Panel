@@ -284,6 +284,14 @@ idioma de Windows; en español el nombre es `Administradores`, no `Administrator
 icacls "C:\ProgramData\CalistoPanel\secrets.yaml" /inheritance:r /grant:r "%USERNAME%:(R,W)" /grant:r "*S-1-5-32-544:(F)"
 ```
 
+El `api_token` debe tener al menos 32 caracteres (el comando de arriba da 44); con uno más
+corto el panel no arranca. Además, `log.file` debe estar dentro de `C:\ProgramData\CalistoPanel\`.
+Restringe también la carpeta entera, porque ahí caen el log y `panel-startup.log`:
+
+```cmd
+icacls "C:\ProgramData\CalistoPanel" /inheritance:r /grant:r "%USERNAME%:(OI)(CI)F" /grant:r "*S-1-5-32-544:(OI)(CI)F"
+```
+
 ### 4.8 Firewall
 
 ```powershell

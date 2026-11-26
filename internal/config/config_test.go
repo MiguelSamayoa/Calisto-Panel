@@ -50,7 +50,10 @@ func write(t *testing.T, pipelines, secrets string, edit func(string) string) st
 	if err := os.WriteFile(sec, []byte(secrets), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	t.Setenv("ProgramData", dir)
 	body := fmt.Sprintf(baseYAML, sec, pipelines, vmrun, vmx)
+	logPath := filepath.ToSlash(filepath.Join(dir, "CalistoPanel", "x.log"))
+	body = strings.Replace(body, `"x.log"`, `"`+logPath+`"`, 1)
 	if edit != nil {
 		body = edit(body)
 	}
@@ -64,8 +67,8 @@ func write(t *testing.T, pipelines, secrets string, edit func(string) string) st
 const (
 	noPipelines = "[]"
 	onePipeline = `[{id: 42, label: "main"}]`
-	tokenOnly   = `api_token: "tok-123"`
-	tokenAndPAT = "api_token: tok-123\nazure_devops_pat: pat-456"
+	tokenOnly   = `api_token: "tok-123-0123456789abcdef0123456789abcdef"`
+	tokenAndPAT = "api_token: tok-123-0123456789abcdef0123456789abcdef\nazure_devops_pat: pat-456"
 )
 
 func TestLoadValid(t *testing.T) {
@@ -76,7 +79,7 @@ func TestLoadValid(t *testing.T) {
 	if cfg.CIEnabled() {
 		t.Error("CI enabled without pipelines")
 	}
-	if cfg.Actions.Media.PlayPauseVK != 0xB3 || cfg.Secrets.APIToken.Reveal() != "tok-123" {
+	if cfg.Actions.Media.PlayPauseVK != 0xB3 || cfg.Secrets.APIToken.Reveal() != "tok-123-0123456789abcdef0123456789abcdef" {
 		t.Errorf("unexpected values: %+v", cfg.Actions.Media)
 	}
 }
@@ -89,6 +92,8 @@ func TestLoadRejects(t *testing.T) {
 		{"stale >= dead", noPipelines, tokenOnly, "stale_ms must be less", func(s string) string { return strings.Replace(s, "stale_ms: 10000", "stale_ms: 60000", 1) }},
 		{"bad port", noPipelines, tokenOnly, "port", func(s string) string { return strings.Replace(s, "7171", "99999", 1) }},
 		{"bad ci interval", noPipelines, tokenOnly, "ci.interval_ms", func(s string) string { return strings.Replace(s, "interval_ms: 60000", "interval_ms: 5000", 1) }},
+		{"short token", noPipelines, `api_token: "short-token"`, "at least 32", nil},
+		{"log outside ProgramData", noPipelines, tokenOnly, "log.file must be inside", func(s string) string { return strings.Replace(s, "CalistoPanel/x.log", "elsewhere/x.log", 1) }},
 		{"empty token", noPipelines, `api_token: ""`, "api_token is required", nil},
 		{"pipelines without PAT", onePipeline, tokenOnly, "azure_devops_pat is required", nil},
 		{"unknown field", noPipelines, tokenOnly, "field bogus", func(s string) string { return s + "bogus: 1\n" }},
@@ -115,7 +120,7 @@ func TestSecretsNeverFormatted(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := fmt.Sprintf("%v %+v %#v %s", cfg.Secrets, cfg.Secrets, cfg.Secrets, cfg.Secrets.APIToken)
-	if strings.Contains(out, "tok-123") || strings.Contains(out, "pat-456") {
+	if strings.Contains(out, "tok-123-0123456789abcdef0123456789abcdef") || strings.Contains(out, "pat-456") {
 		t.Errorf("secret leaked: %s", out)
 	}
 }

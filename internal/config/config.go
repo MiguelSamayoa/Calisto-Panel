@@ -7,7 +7,9 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -244,6 +246,8 @@ func (c *Config) validate() error {
 	}
 	if c.Log.File == "" {
 		bad("log.file is required")
+	} else if pd := os.Getenv("ProgramData"); pd != "" && !underDir(c.Log.File, filepath.Join(pd, "CalistoPanel")) {
+		bad(`log.file must be inside %%ProgramData%%\CalistoPanel\ (got %q)`, c.Log.File)
 	}
 	if err := new(slog.Level).UnmarshalText([]byte(c.Log.Level)); err != nil {
 		bad("log.level %q: want debug|info|warn|error", c.Log.Level)
@@ -305,8 +309,20 @@ func (c *Config) validate() error {
 		bad("actions.media: playpause_vk and next_vk are required")
 	}
 
-	if c.Secrets.APIToken == "" {
+	switch n := len(c.Secrets.APIToken); {
+	case n == 0:
 		bad("secrets: api_token is required")
+	case n < minTokenLen:
+		bad("secrets: api_token must be at least %d characters (it is the only thing between the LAN and the action buttons)", minTokenLen)
 	}
 	return errors.Join(errs...)
+}
+
+// minTokenLen is the shortest api_token accepted: 32 random bytes in base64 is 44.
+const minTokenLen = 32
+
+// underDir reports whether path is strictly inside dir. A relative path is never inside.
+func underDir(path, dir string) bool {
+	rel, err := filepath.Rel(dir, path)
+	return err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
