@@ -184,7 +184,7 @@ data: {"ts":"...","state":"ok","engine":true,"items":[
 
 ```
 event: media
-data: {"ts":"...","state":"ok","active":true,"status":"playing","app":"Spotify.exe","title":"Song","artist":"Band","album":"","position":84.2,"duration":201.0,"volume":42,"cover":"3fa9c01b22de"}
+data: {"ts":"...","state":"ok","active":true,"status":"playing","app":"Spotify.exe","sid":"3a1c9e5d0b72","title":"Song","artist":"Band","album":"","position":84.2,"duration":201.0,"volume":42,"cover":"3fa9c01b22de"}
 ```
 
 - Es la sesión de medios actual de Windows (SMTC, la misma que usa el control de volumen):
@@ -206,10 +206,14 @@ data: {"ts":"...","state":"ok","active":true,"status":"playing","app":"Spotify.e
   del nombre del ejecutable; las sesiones de un mismo exe, p. ej. todas las pestañas de
   Chrome, se agrupan y se mueven juntas). Ambas son `[]` si no hay ninguna. Los campos
   de arriba siguen describiendo la sesión actual (la tarjeta grande).
-- El sobre es un único objeto; las listas `sessions` y `apps` van dentro. Con un fallo de lectura, `state:"error"` y se
-  conservan los últimos datos.
-- Cadencia de 2 s. Tras cada acción de medios que funcionó se vuelve a leer a los ~0,25 s
-  y ~0,7 s, para que el icono de play/pausa y la tarjeta cambien al instante. Solo existe
+- `sid` es el `id` de esa sesión actual dentro de `sessions` (`""` si no hay). El cliente lo
+  usa para que los botones grandes actúen sobre la sesión que muestra la tarjeta y no sobre
+  la tecla de medios global: con dos sesiones de Chrome abiertas, Chrome decide solo a cuál
+  entrega la tecla.
+- El sobre es un único objeto; las listas `sessions` y `apps` van dentro. Con un fallo de
+  lectura, `state:"error"` y se conservan los últimos datos.
+- Cadencia de 2 s. Tras cada acción de medios que funcionó se vuelve a leer a los ~0,25 s,
+  ~0,7 s y ~1,5 s (Chrome tarda en publicar un play o una pausa), para que el icono de play/pausa y la tarjeta cambien al instante. Solo existe
   si `actions.media.enabled` es `true`.
 
 ### Evento `vm`
@@ -427,6 +431,30 @@ Tercera excepción a la lista cerrada, con la misma disciplina que D-31:
   la forma canónica 0-100 de D-34. Ninguno llega a un `argv`.
 - Acciones de medios: instantáneas, nunca `409`, solo con `actions.media.enabled`, bearer
   como todo `POST`. No se usa el PID (se recicla); la identidad es el hash del nombre.
+- Nombre de la app de audio: las sesiones de audio se agrupan por ejecutable. Si el proceso es
+  un anfitrión auxiliar (`msedgewebview2.exe`, que WhatsApp y otras apps embeben), se sube al
+  proceso padre para que el volumen y el nombre sean los de la app real. La etiqueta es la
+  `FileDescription` del ejecutable (`Google Chrome`) o, si no se puede leer (apps de la
+  Tienda), el nombre del archivo sin extensión (`WhatsApp`).
+
+#### Interfaz del panel Multimedia
+
+Columna derecha con **una tarjeta por app de audio**: nombre, una sola barra de volumen
+(Windows tiene un volumen por app) y debajo todas las sesiones de esa app, cada una con su
+título y sus botones ⏮ ⏯ ⏭. El cliente une sesión y app por nombre: SMTC dice `Chrome`,
+`Chrome._crx_<hash>` (una PWA) o `5319275A.WhatsAppDesktop_…!App`; Core Audio dice
+`Google Chrome` o `WhatsApp`; coinciden si algún fragmento de 4 o más letras del id de la
+sesión contiene el nombre de la app, o al revés. Una sesión sin app de audio, o una app sin
+sesión, tiene su tarjeta con lo que tiene. Lo que suena va primero.
+
+Límites conocidos:
+
+- Solo hay botones donde la app publica una sesión SMTC. Steam, los juegos y muchas apps no
+  lo hacen: tienen barra de volumen y nada más. Windows no ofrece play/pausa para audio ajeno.
+- Una sesión puede aceptar los comandos y descartarlos sin error (observado con un video de
+  YouTube en la sesión `Chrome`: pausa, play, alternar y ±10 s devolvían éxito y no
+  cambiaban nada; la PWA de YouTube Music sí obedecía). No es algo que el servidor pueda
+  detectar ni corregir.
 
 ### Acciones por proyecto
 

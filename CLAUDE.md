@@ -104,7 +104,7 @@ unidades de presentación, colores ni texto de interfaz.
 - `sensors`: cada **5 s**.
 - `ci`: cada **60 s**, configurable a **150 s**. Con backoff a 5 min tras error.
 - `processes`: cada **5 s**. `docker`: cada **5 s**, solo si Docker está habilitado.
-- `media`: cada **2 s**, y de nuevo a los ~0,25 s y ~0,7 s de cada acción de medios.
+- `media`: cada **2 s**, y de nuevo a los ~0,25 s, ~0,7 s y ~1,5 s de cada acción de medios.
   `vm`: cada **5 s**, solo si VMware está habilitado.
 - `actions`: solo como respuesta a una ejecución. Nunca por sondeo.
 - Comentario `: keepalive` en el stream cada 15 s, y `retry: 3000`.
