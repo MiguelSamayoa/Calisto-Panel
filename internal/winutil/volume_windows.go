@@ -73,6 +73,20 @@ func (m *Media) SetVolume(ctx context.Context, pct int) error {
 
 // endpointVolume returns the IAudioEndpointVolume of the default playback device.
 func endpointVolume() (unsafe.Pointer, error) {
+	dev, err := defaultDevice()
+	if err != nil {
+		return nil, err
+	}
+	defer release(dev)
+	var ep unsafe.Pointer
+	if hr := vcall(dev, slotDeviceActivate, uintptr(unsafe.Pointer(&iidAudioEndpointVolume)), clsctxAll, 0, uintptr(unsafe.Pointer(&ep))); hr != 0 {
+		return nil, hrErr("IMMDevice.Activate", hr)
+	}
+	return ep, nil
+}
+
+// defaultDevice returns the IMMDevice of the default playback device.
+func defaultDevice() (unsafe.Pointer, error) {
 	var enum unsafe.Pointer
 	hr, _, _ := procCoCreateInstance.Call(uintptr(unsafe.Pointer(&clsidMMDeviceEnumerator)), 0, clsctxAll,
 		uintptr(unsafe.Pointer(&iidMMDeviceEnumerator)), uintptr(unsafe.Pointer(&enum)))
@@ -84,10 +98,5 @@ func endpointVolume() (unsafe.Pointer, error) {
 	if dev == nil {
 		return nil, errors.New("no default playback device")
 	}
-	defer release(dev)
-	var ep unsafe.Pointer
-	if hr := vcall(dev, slotDeviceActivate, uintptr(unsafe.Pointer(&iidAudioEndpointVolume)), clsctxAll, 0, uintptr(unsafe.Pointer(&ep))); hr != 0 {
-		return nil, hrErr("IMMDevice.Activate", hr)
-	}
-	return ep, nil
+	return dev, nil
 }

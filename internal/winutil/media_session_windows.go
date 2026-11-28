@@ -187,7 +187,11 @@ func readSession() (MediaInfo, error) {
 		return MediaInfo{}, err
 	}
 	defer release(sess)
+	return readInfo(sess), nil
+}
 
+// readInfo reads one session; the caller keeps ownership of sess.
+func readInfo(sess unsafe.Pointer) MediaInfo {
 	info := MediaInfo{Active: true, Status: "other"}
 	info.App, _ = hstringGetter(sess, slotSessApp)
 
@@ -226,7 +230,7 @@ func readSession() (MediaInfo, error) {
 		}
 		release(tl)
 	}
-	return info, nil
+	return info
 }
 
 // readCover reads the whole thumbnail stream of the current session into memory.
@@ -358,7 +362,11 @@ func seekSession(d time.Duration) error {
 		return errNoSession
 	}
 	defer release(sess)
+	return seekOn(sess, d)
+}
 
+// seekOn moves the position of one session; the caller keeps ownership of sess.
+func seekOn(sess unsafe.Pointer, d time.Duration) error {
 	tl := comOut(sess, slotSessTimeline)
 	if tl == nil {
 		return errors.New("media session has no timeline")
