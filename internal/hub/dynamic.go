@@ -198,6 +198,7 @@ type MediaUpdate struct {
 	Active   bool
 	Status   string // playing | paused | stopped | other
 	App      string // source app, as Windows names it
+	SID      string // id of the current session, as in Sessions; "" when none
 	Title    string
 	Artist   string
 	Album    string
@@ -206,7 +207,55 @@ type MediaUpdate struct {
 	Volume   float64 // master volume, percent 0-100; -1 when unreadable
 	Cover    string  // short id of the cover image ("" = none); changes when the image does
 	CoverImg []byte  // the encoded image behind Cover; served at /api/media/cover
+	Sessions []MediaSession
+	Apps     []AudioApp
 	Fault    string
+}
+
+// MediaSession is one entry of the full session list; ID is the stable key actions use.
+type MediaSession struct {
+	ID       string  `json:"id"`
+	App      string  `json:"app"`
+	Status   string  `json:"status"`
+	Title    string  `json:"title"`
+	Artist   string  `json:"artist"`
+	Position float64 `json:"position"`
+	Duration float64 `json:"duration"`
+}
+
+// AudioApp is one application with an audio session and its own volume (percent 0-100).
+type AudioApp struct {
+	ID     string  `json:"id"`
+	Name   string  `json:"name"`
+	Volume float64 `json:"volume"`
+}
+
+// ValidShortID reports whether s is 12 lowercase hex digits (the shape of a session or
+// app id).
+func ValidShortID(s string) bool { return ValidContainerID(s) }
+
+// HasMediaSession reports whether the server listed this session in its last poll.
+func (h *Hub) HasMediaSession(id string) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, s := range h.mediaNow.Sessions {
+		if s.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+// HasAudioApp reports whether the server listed this app in its last poll.
+func (h *Hub) HasAudioApp(id string) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, a := range h.mediaNow.Apps {
+		if a.ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 // VMUpdate is one poll of the configured VMware VM.
@@ -275,6 +324,10 @@ type mediaEnvelope struct {
 	Duration float64 `json:"duration"`
 	Volume   float64 `json:"volume"`
 	Cover    string  `json:"cover"`
+	SID      string  `json:"sid"` // id of the current session: the key of media.session.* actions
+	// Every session and every app with audio; the fields above describe the current one.
+	Sessions []MediaSession `json:"sessions"`
+	Apps     []AudioApp     `json:"apps"`
 }
 
 type vmEnvelope struct {
@@ -292,10 +345,17 @@ func (h *Hub) mediaPayloadLocked() []byte {
 	now := h.now()
 	state, age := health(h.med.updatedAt, h.med.fault, now, h.sensorsStale, h.sensorsDead)
 	m := h.mediaNow
+	if m.Sessions == nil { // JSON [] and not null, so the client never has to check
+		m.Sessions = []MediaSession{}
+	}
+	if m.Apps == nil {
+		m.Apps = []AudioApp{}
+	}
 	return marshal(mediaEnvelope{
 		TS: now.Format(time.RFC3339), State: state, AgeMs: age,
-		Active: m.Active, Status: m.Status, App: m.App, Title: m.Title, Artist: m.Artist, Album: m.Album,
+		Active: m.Active, Status: m.Status, App: m.App, SID: m.SID, Title: m.Title, Artist: m.Artist, Album: m.Album,
 		Position: m.Position, Duration: m.Duration, Volume: m.Volume, Cover: m.Cover,
+		Sessions: m.Sessions, Apps: m.Apps,
 	})
 }
 

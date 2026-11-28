@@ -206,7 +206,7 @@ func TestLogsFuncOfOneContainer(t *testing.T) {
 
 func TestMediaUpdateMapping(t *testing.T) {
 	u := mediaUpdate(winutil.MediaInfo{Active: true, Status: "playing", App: "Chrome", Title: "T", Artist: "A", Album: "L", Position: 90 * time.Second, Duration: 5 * time.Minute})
-	want := hub.MediaUpdate{Active: true, Status: "playing", App: "Chrome", Title: "T", Artist: "A", Album: "L", Position: 90, Duration: 300}
+	want := hub.MediaUpdate{Active: true, Status: "playing", App: "Chrome", SID: winutil.SessionID("Chrome"), Title: "T", Artist: "A", Album: "L", Position: 90, Duration: 300}
 	if !reflect.DeepEqual(u, want) {
 		t.Errorf("mediaUpdate = %+v, want %+v", u, want)
 	}
@@ -236,7 +236,7 @@ func TestPollMediaRereadsAfterAPoke(t *testing.T) {
 	go func() {
 		defer close(done)
 		// A long interval: any read after the first one can only come from the poke.
-		pollMedia(ctx, config.Media{IntervalMs: 60000}, read, nil, nil, poke, h, slog.New(slog.NewTextHandler(io.Discard, nil)))
+		pollMedia(ctx, config.Media{IntervalMs: 60000}, read, nil, nil, nil, poke, h, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	}()
 	defer func() { cancel(); <-done }()
 
@@ -272,7 +272,7 @@ func TestPollMediaReportsAFailureAsErrorState(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		pollMedia(ctx, config.Media{IntervalMs: 60000}, read, nil, nil, make(chan struct{}), h, slog.New(slog.NewTextHandler(io.Discard, nil)))
+		pollMedia(ctx, config.Media{IntervalMs: 60000}, read, nil, nil, nil, make(chan struct{}), h, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	}()
 	select {
 	case <-called:

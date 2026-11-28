@@ -76,6 +76,10 @@ func run(configPath string) error {
 		// h is assigned just below, before the server can accept a request.
 		HasContainer:      func(id string) bool { return h.HasContainer(id) },
 		ProjectContainers: func(name string) []string { return h.ProjectContainers(name) },
+		SessionDo:         mediaSession.SessionDo,
+		HasSession:        func(id string) bool { return h.HasMediaSession(id) },
+		AppVolume:         mediaSession.SetAppVolume,
+		HasApp:            func(id string) bool { return h.HasAudioApp(id) },
 	})
 	if h, err = hub.New(cfg, exec.IDs()); err != nil {
 		return err
@@ -106,7 +110,7 @@ func run(configPath string) error {
 	}
 	if cfg.Actions.Media.Enabled {
 		start(func() {
-			pollMedia(ctx, cfg.Actions.Media, mediaSession.Read, mediaSession.Cover, mediaSession.Volume, mediaPoke, h, log)
+			pollMedia(ctx, cfg.Actions.Media, mediaSession.Read, mediaSession.Cover, mediaSession.Volume, mediaMore(mediaSession), mediaPoke, h, log)
 		})
 	}
 	if cfg.Actions.VMware.Enabled {

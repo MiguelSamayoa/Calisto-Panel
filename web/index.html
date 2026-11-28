@@ -132,9 +132,27 @@
 
   /* media buttons: low, with the symbol centred both ways */
   #ctrl { flex: none; display: flex; gap: 6px; }
-  #ctrl .act { flex: 1 1 0; min-width: 0; min-height: 72px; padding: 0; gap: 0; align-items: center; justify-content: center; }
+  #ctrl .act { flex: 1 1 0; min-width: 0; min-height: 56px; padding: 0; gap: 0; align-items: center; justify-content: center; }
   #ctrl .act .st { display: none; }
   #ctrl .act .name { display: block; line-height: 1; font-size: 1.5rem; text-align: center; white-space: nowrap; }
+
+  /* right column: one card per app, with its own now-playing line, transport and volume */
+  #mix { flex: 0 0 38%; min-width: 0; min-height: 0; overflow-y: auto; display: none; flex-direction: column; gap: 8px; align-content: flex-start; }
+  #mix.show { display: flex; }
+  #mix.off { opacity: .45; pointer-events: none; }
+  #mix h3 { margin: 0; font-size: .75rem; font-weight: 600; color: var(--dim); text-transform: uppercase; letter-spacing: .05em; }
+  .mc { flex: none; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+  .mc .mn { font-weight: 600; font-size: 1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mc.idle .mn { color: var(--dim); }
+  .mc .mv { display: flex; align-items: center; gap: 8px; }
+  .mc .mv input { flex: 1; min-width: 0; height: 28px; accent-color: var(--run); }
+  .mc .mv span { flex: none; width: 3em; text-align: right; font-variant-numeric: tabular-nums; color: var(--dim); font-size: .85rem; }
+  .mc .ml { display: flex; flex-direction: column; gap: 6px; }
+  .mc .ms { display: flex; align-items: center; gap: 8px; border-top: 1px solid var(--line); padding-top: 6px; }
+  .mc .ms.idle .mt { color: var(--dim); }
+  .mc .mt { flex: 1; min-width: 0; font-size: .85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mc .mb { flex: none; display: flex; gap: 4px; }
+  .mc .mb button { min-width: 40px; min-height: 36px; padding: 0; background: #1a1a1a; color: var(--text); border: 1px solid var(--line); border-radius: 8px; font-size: 1rem; }
 
   /* volume: a vertical bar on the left edge, full height; drag or tap to set the level */
   #vol { flex: none; width: 76px; display: none; flex-direction: column; align-items: center; gap: 8px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 0; }
@@ -243,6 +261,8 @@
     #p0 { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; overflow-y: auto; }
     #pm { overflow-y: auto; }
     #vol { min-height: 240px; }
+    #pm { flex-direction: column; }
+    #mix { flex: none; max-height: 45vh; }
     #dBody { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
     #vmCard { flex-wrap: wrap; }
     #tabs button { padding: 6px 8px; }
@@ -290,6 +310,7 @@
     </div>
     <div id="ctrl"></div>
     </div>
+    <div id="mix"></div>
   </section>
 
   <section class="page" id="p0" aria-label="Sistema">
@@ -885,11 +906,117 @@
     $('volTrack').addEventListener(t, function () { volDrag = false; });
   });
 
+  // ---- right column: one card per app. Every media session of an app (two Chrome tabs,
+  // a YouTube Music PWA) sits in the same card, each with its own transport, over ONE
+  // volume slider, because Windows has a single volume per app. SMTC says "Chrome", Core
+  // Audio says "Google Chrome": they are matched by name. A session with no audio app, or an
+  // app with no session, gets a card with only what it has. Everything is keyed and updated
+  // in place, so a slider under the finger is never rebuilt.
+  var mixRows = {};            // card key -> parts
+  var appHold = {};            // app id -> until when its slider keeps what the user set
+  function norm(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
+  // "Chrome._crx_<hash>" (an installed Chrome app) belongs to "Chrome": compare the head.
+  // A Store app is "5319275A.WhatsAppDesktop_cv1g1gvanyjgm!App": any 4+ letter piece of the
+  // id may be the one that names the app.
+  function sameApp(sessApp, audioName) {
+    var b = norm(audioName);
+    if (b.length < 3) { return false; }
+    return String(sessApp || '').split(/[._!]/).some(function (p) {
+      var a = norm(p);
+      return a.length >= 4 && (a === b || a.indexOf(b) >= 0 || b.indexOf(a) >= 0);
+    });
+  }
+  function postAction(id) {
+    return fetch('/api/do/' + id, { method: 'POST', headers: { 'Authorization': 'Bearer ' + getToken() } })
+      .then(function (r) { if (r.status !== 202) { toast(r.status === 401 ? 'Token inválido' : 'Error ' + r.status); } },
+            function () { toast('Sin conexión con el PC'); });
+  }
+  function makeCard() {
+    var c = { aid: '', busy: false, next: null, subs: {} };
+    c.row = el('div', 'mc');
+    c.name = el('div', 'mn');
+    c.vol = el('div', 'mv');
+    c.rng = el('input'); c.rng.type = 'range'; c.rng.min = 0; c.rng.max = 100; c.rng.step = 1;
+    c.pct = el('span');
+    c.vol.appendChild(c.rng); c.vol.appendChild(c.pct);
+    c.rng.addEventListener('input', function () {
+      var n = parseInt(c.rng.value, 10);
+      c.pct.textContent = n + ' %';
+      appHold[c.aid] = Date.now() + 2500;
+      pushApp(c, n);
+    });
+    c.list = el('div', 'ml');
+    c.row.appendChild(c.name); c.row.appendChild(c.vol); c.row.appendChild(c.list);
+    return c;
+  }
+  function makeSub(s) {
+    var r = { row: el('div', 'ms'), t: el('div', 'mt'), b: el('div', 'mb') };
+    [['prev', '⏮'], ['playpause', '▶'], ['next', '⏭']].forEach(function (x) {
+      var bt = el('button', '', x[1]); bt.type = 'button';
+      bt.addEventListener('click', function () { postAction('media.session.' + x[0] + '.' + s.id); });
+      r.b.appendChild(bt);
+      if (x[0] === 'playpause') { r.pp = bt; }
+    });
+    r.row.appendChild(r.t); r.row.appendChild(r.b);
+    return r;
+  }
+  // At most one volume request in flight per card; the newest level waits its turn.
+  function pushApp(c, n) {
+    if (c.busy) { c.next = n; return; }
+    c.busy = true;
+    postAction('media.app.volume.' + c.aid + '.' + n).then(function () {
+      c.busy = false;
+      if (c.next !== null) { var v = c.next; c.next = null; pushApp(c, v); }
+    });
+  }
+  function renderMix(d) {
+    var sess = d.sessions || [], apps = d.apps || [], seen = {}, used = {}, host = $('mix'), cards = [];
+    apps.forEach(function (a) {
+      var ss = sess.filter(function (s) { return !used[s.id] && sameApp(s.app, a.name) && (used[s.id] = true); });
+      cards.push({ key: 'app:' + a.id, a: a, ss: ss });
+    });
+    sess.forEach(function (s) { if (!used[s.id]) { cards.push({ key: 'sess:' + s.id, a: null, ss: [s] }); } });
+    var playing = function (it) { return it.ss.some(function (s) { return s.status === 'playing'; }) ? 1 : 0; };
+    cards.sort(function (x, y) { return playing(y) - playing(x); });   // what is playing first
+    host.className = (cards.length ? 'show' : '') + (d.state === 'ok' && getToken() !== '' ? '' : ' off');
+    cards.forEach(function (it) {
+      var c = mixRows[it.key];
+      if (!c) { c = makeCard(); mixRows[it.key] = c; }
+      host.appendChild(c.row); // appending an existing child moves it: this also orders the list
+      seen[it.key] = true;
+      c.aid = it.a ? it.a.id : '';
+      c.name.textContent = it.a ? it.a.name : appName(it.ss[0].app);
+      c.vol.style.display = it.a ? '' : 'none';
+      c.row.className = 'mc' + (playing(it) ? '' : ' idle');
+      if (it.a && Date.now() > (appHold[it.a.id] || 0)) {
+        c.rng.value = Math.round(it.a.volume);
+        c.pct.textContent = Math.round(it.a.volume) + ' %';
+      }
+      var subSeen = {};
+      it.ss.forEach(function (s) {
+        var r = c.subs[s.id];
+        if (!r) { r = makeSub(s); c.subs[s.id] = r; }
+        c.list.appendChild(r.row);
+        subSeen[s.id] = true;
+        r.t.textContent = (s.title || '(sin título)') + (s.artist ? ' — ' + s.artist : '');
+        r.pp.textContent = s.status === 'playing' ? '⏸' : '▶';
+        r.row.className = 'ms' + (s.status === 'playing' ? '' : ' idle');
+      });
+      Object.keys(c.subs).forEach(function (k) {
+        if (!subSeen[k]) { var x = c.subs[k].row; if (x.parentNode) { x.parentNode.removeChild(x); } delete c.subs[k]; }
+      });
+    });
+    Object.keys(mixRows).forEach(function (k) {
+      if (!seen[k]) { var r = mixRows[k].row; if (r.parentNode) { r.parentNode.removeChild(r); } delete mixRows[k]; }
+    });
+  }
+
   function renderMedia(d) {
     lastMedia = d;
     mediaAt = Date.now();
     paintMedia();
     syncVol(d);
+    renderMix(d);
     refreshMediaButtons();
   }
 
@@ -1146,8 +1273,15 @@
     ui.name.textContent = '¿Confirmar?';
   }
 
+  // The big transport buttons act on the session the card shows, not on the global media
+  // key: with two Chrome sessions open, Chrome decides for itself who gets the key.
+  function mediaTarget(id) {
+    var m = /^media\.(playpause|prev|next|seek_back|seek_fwd)$/.exec(id);
+    return m && lastMedia && lastMedia.state === "ok" && lastMedia.active && lastMedia.sid ? "media.session." + m[1] + "." + lastMedia.sid : id;
+  }
+
   function send(id) {
-    fetch('/api/do/' + encodeURIComponent(id), {
+    fetch('/api/do/' + encodeURIComponent(mediaTarget(id)), {
       method: 'POST',
       headers: { 'Authorization': 'Bearer ' + getToken() }
     }).then(function (r) {

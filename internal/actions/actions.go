@@ -50,6 +50,13 @@ type Deps struct {
 	// ProjectContainers returns the container ids of a compose project as the server
 	// listed them in its last poll (nil when unknown).
 	ProjectContainers func(project string) []string
+	// SessionDo runs a transport verb on one media session; HasSession reports whether
+	// the server listed that session id in its last poll. Nil disables the family.
+	SessionDo  func(ctx context.Context, id, verb string) error
+	HasSession func(id string) bool
+	// AppVolume sets one app's volume (0-100); HasApp is HasSession for audio apps.
+	AppVolume func(ctx context.Context, id string, pct int) error
+	HasApp    func(id string) bool
 }
 
 // spec is a process (argv), a media key (vk), a relative seek or a volume level; exactly
@@ -61,6 +68,7 @@ type spec struct {
 	seek   time.Duration
 	vol    int // 0-100; only meaningful when setVol
 	setVol bool
+	call   func(ctx context.Context) error // per-session / per-app media actions
 	media  bool
 }
 
@@ -177,6 +185,12 @@ func (e *Executor) resolve(id string) (spec, bool) {
 		}
 		return spec{vol: n, setVol: true, media: true}, true
 	}
+	if rest, ok := strings.CutPrefix(id, "media.session."); ok {
+		return e.resolveSession(rest)
+	}
+	if rest, ok := strings.CutPrefix(id, "media.app.volume."); ok {
+		return e.resolveAppVolume(rest)
+	}
 	if !e.docker {
 		return spec{}, false
 	}
@@ -210,6 +224,39 @@ func (e *Executor) resolve(id string) (spec, bool) {
 	return spec{}, false
 }
 
+// resolveSession handles media.session.<verb>.<sid>: sid must be a session the server
+// itself listed in its last poll. Nothing from the client reaches an argv.
+func (e *Executor) resolveSession(rest string) (spec, bool) {
+	verb, sid, ok := strings.Cut(rest, ".")
+	if !ok || !e.volume || e.deps.SessionDo == nil || e.deps.HasSession == nil {
+		return spec{}, false
+	}
+	switch verb {
+	case "playpause", "prev", "next", "seek_back", "seek_fwd":
+	default:
+		return spec{}, false
+	}
+	if !hub.ValidShortID(sid) || !e.deps.HasSession(sid) {
+		return spec{}, false
+	}
+	do := e.deps.SessionDo
+	return spec{media: true, call: func(ctx context.Context) error { return do(ctx, sid, verb) }}, true
+}
+
+// resolveAppVolume handles media.app.volume.<aid>.<0-100>, with the same listing rule.
+func (e *Executor) resolveAppVolume(rest string) (spec, bool) {
+	aid, lvl, ok := strings.Cut(rest, ".")
+	if !ok || !e.volume || e.deps.AppVolume == nil || e.deps.HasApp == nil {
+		return spec{}, false
+	}
+	n, valid := parseVolume(lvl)
+	if !valid || !hub.ValidShortID(aid) || !e.deps.HasApp(aid) {
+		return spec{}, false
+	}
+	set := e.deps.AppVolume
+	return spec{media: true, call: func(ctx context.Context) error { return set(ctx, aid, n) }}, true
+}
+
 // parseVolume accepts exactly the canonical decimal form of 0..100: one to three digits,
 // no sign, no leading zero, no spaces. Anything else is not a volume action.
 func parseVolume(s string) (int, bool) {
@@ -233,6 +280,8 @@ func (e *Executor) execute(id, exec string, s spec, began time.Time) {
 
 	var err error
 	switch {
+	case s.call != nil:
+		err = s.call(ctx)
 	case s.argv != nil:
 		err = e.deps.Run(ctx, s.argv)
 	case s.setVol:

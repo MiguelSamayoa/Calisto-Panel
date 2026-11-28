@@ -3,6 +3,7 @@ package actions
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"reflect"
@@ -509,5 +510,53 @@ func TestVolumeActionAcceptsOnlyCanonicalLevels(t *testing.T) {
 	}
 	if len(h.vols) != n {
 		t.Error("an invalid volume id reached the volume setter")
+	}
+}
+
+func TestSessionAndAppActionsOnlyForListedIDs(t *testing.T) {
+	var mu sync.Mutex
+	var calls []string
+	ex := New(context.Background(), testCfg(), Deps{
+		Report: func(hub.ActionUpdate) {},
+		Log:    slog.New(slog.NewTextHandler(io.Discard, nil)),
+		SessionDo: func(_ context.Context, id, verb string) error {
+			mu.Lock()
+			calls = append(calls, "s:"+id+":"+verb)
+			mu.Unlock()
+			return nil
+		},
+		HasSession: func(id string) bool { return id == "0123456789ab" },
+		AppVolume: func(_ context.Context, id string, pct int) error {
+			mu.Lock()
+			calls = append(calls, fmt.Sprintf("a:%s:%d", id, pct))
+			mu.Unlock()
+			return nil
+		},
+		HasApp: func(id string) bool { return id == "ba9876543210" },
+	})
+	for _, id := range []string{"media.session.next.0123456789ab", "media.app.volume.ba9876543210.35"} {
+		if _, err := ex.Do(id); err != nil {
+			t.Fatalf("%s: %v", id, err)
+		}
+	}
+	ex.Wait()
+	for _, id := range []string{
+		"media.session.next.ffffffffffff",       // not listed
+		"media.session.stop.0123456789ab",       // verb not allowed
+		"media.session.next.0123456789AB",       // not canonical hex
+		"media.session.next.0123456789ab.extra", // trailing junk
+		"media.app.volume.0123456789ab.10",      // session id is not an app id
+		"media.app.volume.ba9876543210.101",     // out of range
+		"media.app.volume.ba9876543210.050",     // leading zero
+		"media.app.volume.ba9876543210",         // no level
+	} {
+		if _, err := ex.Do(id); !errors.Is(err, ErrUnknown) {
+			t.Errorf("%q: err = %v, want ErrUnknown", id, err)
+		}
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(calls) != 2 {
+		t.Fatalf("calls = %v, want exactly the two valid ones", calls)
 	}
 }
