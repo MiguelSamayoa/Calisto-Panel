@@ -200,7 +200,13 @@ data: {"ts":"...","state":"ok","active":true,"status":"playing","app":"Spotify.e
   haya imagen. El servidor la lee de SMTC una vez por pista (hasta 5 reintentos, porque la
   fuente suele publicarla después del título), la guarda solo en memoria (máx. 2 MiB) y no
   escribe nada a disco.
-- Un objeto en el sobre, no una lista. Con un fallo de lectura, `state:"error"` y se
+- `sessions` (D-35) lista **todas** las sesiones SMTC: `{id,app,status,title,artist,position,
+  duration}`. `id` es el hash corto (12 hex) de la app de origen: estable entre sondeos, no un
+  índice. `apps` lista las aplicaciones con sesión de audio: `{id,name,volume}` (`id` = hash
+  del nombre del ejecutable; las sesiones de un mismo exe, p. ej. todas las pestañas de
+  Chrome, se agrupan y se mueven juntas). Ambas son `[]` si no hay ninguna. Los campos
+  de arriba siguen describiendo la sesión actual (la tarjeta grande).
+- El sobre es un único objeto; las listas `sessions` y `apps` van dentro. Con un fallo de lectura, `state:"error"` y se
   conservan los últimos datos.
 - Cadencia de 2 s. Tras cada acción de medios que funcionó se vuelve a leer a los ~0,25 s
   y ~0,7 s, para que el icono de play/pausa y la tarjeta cambien al instante. Solo existe
@@ -406,6 +412,21 @@ sin dependencias). Es la segunda excepción a la lista cerrada (D-34) y se acota
 4. Solo existe con `actions.media.enabled: true`. Exige bearer como todo `POST`.
 
 El evento `media` trae `volume` (porcentaje 0-100, `-1` si no se pudo leer) en cada sondeo.
+
+### Sesiones y volumen por app (`media.session.*`, `media.app.volume.*`) — D-35
+
+Tercera excepción a la lista cerrada, con la misma disciplina que D-31:
+
+- `media.session.<verbo>.<sid>`: `verbo` ∈ `playpause|prev|next|seek_back|seek_fwd`. Usa los
+  controles de esa sesión SMTC (`TryTogglePlayPause`, `TrySkipNext/Previous`,
+  `TryChangePlaybackPosition`), no teclas de medios globales.
+- `media.app.volume.<aid>.<n>`: fija `ISimpleAudioVolume` de todas las sesiones de audio de
+  esa app (Core Audio, `IAudioSessionManager2`, como EarTrumpet; sin elevación).
+- `<sid>` y `<aid>` son 12 hex en minúscula **y** deben figurar en la lista `sessions`/`apps`
+  que el propio servidor publicó en su último sondeo; si no, `404 unknown_action`. `<n>` sigue
+  la forma canónica 0-100 de D-34. Ninguno llega a un `argv`.
+- Acciones de medios: instantáneas, nunca `409`, solo con `actions.media.enabled`, bearer
+  como todo `POST`. No se usa el PID (se recicla); la identidad es el hash del nombre.
 
 ### Acciones por proyecto
 
@@ -677,6 +698,7 @@ Consecuencias aceptadas:
 | D-32 | Sin límite de frecuencia global; bloqueo de pares encender/apagar en la interfaz; acciones de medios instantáneas | mantener 1 acción cada 2 s; límite solo para las no-medios | El límite de 2 s impedía repetir ±10 s o siguiente, y no resolvía lo que de verdad molestaba (pulsar dos veces "encender"). El `409` por ID ya impide dos ejecuciones simultáneas de lo mismo, y la interfaz bloquea el botón pulsado y libera el contrario al instante. Riesgo aceptado: se puede pulsar "apagar" mientras "encender" aún corre (Docker tarda); lo decide el usuario, no el servidor |
 | D-33 | Gráficas de 1 y 5 min con el historial **en el cliente** (memoria de la página + copia en `localStorage` cada 15 s) | historial en el servidor; base de datos; sin gráficas | El usuario pidió gráficas de CPU, RAM, temperaturas y red con ventana de 1 o 5 min. Un buffer de 6 min son ~70 puntos por sensor: cabe en el teléfono, y guardarlo allí respeta D-24 (el PC sigue sin almacenar nada) y la regla de no unir dominios. Se pierde si se borran los datos del navegador del teléfono, y una caída de red deja un hueco (la línea se corta, no se interpola). RAM se grafica como % de la memoria instalada (`memTotal` del evento `processes`) para compartir el eje 0-100 con la CPU. Rangos, colores y niveles de peligro son de presentación y viven en `web/index.html` |
 | D-34 | Volumen con barra arrastrable: `media.volume.<0-100>` + lectura en el evento `media` | solo teclas de volumen (±2 %); endpoint con valor libre | El usuario quiere una barra. Fijar un nivel exacto exige que el cliente envíe un número, lo que choca con la regla 3. Se acota como D-31: el entero tiene forma canónica 0-100, no entra a ningún `argv` y solo alimenta `SetMasterVolumeLevelScalar`. El nivel real se publica en el evento `media` para que la barra siga a los cambios hechos en el PC |
+| D-35 | Varias sesiones SMTC y volumen por app: `media.session.<verbo>.<sid>` y `media.app.volume.<aid>.<n>`, ids validados contra la última lista publicada | solo la sesión actual; PID como id; endpoint con nombre de proceso libre | El usuario quiere ver todo lo que suena y mezclar por app (como EarTrumpet). Ids = hash estable del nombre de app (no índice ni PID, que cambian o se reciclan); el servidor solo acepta ids que él mismo listó, igual que D-31. Sin argv ni procesos |
 
 ---
 

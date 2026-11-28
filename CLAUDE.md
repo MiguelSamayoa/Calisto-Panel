@@ -124,7 +124,11 @@ no los dupliques como constantes en el código.
    `docker.start`, `docker.stop`, `vm.stop`, `vm.start`, `media.playpause`,
    `media.prev`, `media.next`, `media.seek_back`, `media.seek_fwd` (±10 s), más la familia
    `media.volume.<n>` (D-34; `<n>` es un entero 0-100 en su forma canónica, sin signo ni ceros
-   a la izquierda; solo fija el volumen maestro, nunca llega a un `argv`), más cuatro
+   a la izquierda; solo fija el volumen maestro, nunca llega a un `argv`), más dos
+   familias de medios por sesión/app (D-35): `media.session.<verbo>.<sid>` (verbo:
+   `playpause|prev|next|seek_back|seek_fwd`) y `media.app.volume.<aid>.<n>`; `<sid>`/`<aid>`
+   son 12 hex en minúscula **y** figuran en la lista que el servidor publicó en su último
+   sondeo de `media` (nunca llegan a un `argv`), más cuatro
    familias de Docker (D-31): `container.start.<id>`,
    `container.stop.<id>`, `project.start.<nombre>` y `project.stop.<nombre>`. `<id>` debe
    ser exactamente 12 dígitos hexadecimales en minúscula **y** figurar en la lista de
